@@ -175,7 +175,8 @@ NS_INLINE NSColor *MPGetWebViewBackgroundColor(WebView *webview)
 #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101100
      WebEditingDelegate, WebFrameLoadDelegate, WebPolicyDelegate, WebResourceLoadDelegate,
 #endif
-     MPAutosaving, MPRendererDataSource, MPRendererDelegate>
+     MPAutosaving, MPRendererDataSource, MPRendererDelegate,
+     NSOutlineViewDataSource, NSOutlineViewDelegate>
 
 typedef NS_ENUM(NSUInteger, MPWordCountType) {
     MPWordCountTypeWord,
@@ -189,6 +190,8 @@ typedef NS_ENUM(NSUInteger, MPWordCountType) {
 @property (unsafe_unretained) IBOutlet MPEditorView *editor;
 @property (weak) IBOutlet NSLayoutConstraint *editorPaddingBottom;
 @property (weak) IBOutlet WebView *preview;
+@property (strong) NSOutlineView *sidebarOutlineView;
+@property (strong) NSArray *sidebarItems;
 @property (weak) IBOutlet NSPopUpButton *wordCountWidget;
 @property (strong) IBOutlet MPToolbarController *toolbarController;
 @property (copy, nonatomic) NSString *autosaveName;
@@ -360,6 +363,42 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
 {
     [super windowControllerDidLoadNib:controller];
 
+    if (self.isDirectory) {
+        NSView *contentView = controller.window.contentView;
+        NSView *oldSplitView = self.splitView;
+        
+        NSSplitView *outerSplitView = [[NSSplitView alloc] initWithFrame:contentView.bounds];
+        [outerSplitView setVertical:YES];
+        [outerSplitView setDividerStyle:NSSplitViewDividerStyleThin];
+        [outerSplitView setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+        
+        NSScrollView *scrollView = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, 200, contentView.bounds.size.height)];
+        [scrollView setHasVerticalScroller:YES];
+        [scrollView setAutoresizingMask:NSViewHeightSizable];
+        
+        NSOutlineView *outlineView = [[NSOutlineView alloc] initWithFrame:scrollView.bounds];
+        NSTableColumn *column = [[NSTableColumn alloc] initWithIdentifier:@"MainColumn"];
+        [column setWidth:1000];
+        [outlineView addTableColumn:column];
+        [outlineView setOutlineTableColumn:column];
+        [outlineView setHeaderView:nil];
+        [outlineView setDataSource:self];
+        [outlineView setDelegate:self];
+        [outlineView reloadData];
+        [scrollView setDocumentView:outlineView];
+        
+        self.sidebarOutlineView = outlineView;
+        
+        [oldSplitView removeFromSuperview];
+        [outerSplitView addSubview:scrollView];
+        [outerSplitView addSubview:oldSplitView];
+        [controller.window setContentView:outerSplitView];
+        
+        [oldSplitView setFrameSize:NSMakeSize(contentView.bounds.size.width - 200, contentView.bounds.size.height)];
+        [scrollView setFrameSize:NSMakeSize(200, contentView.bounds.size.height)];
+        [outerSplitView adjustSubviews];
+    }
+
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
 
     // All files use their absolute path to keep their window states.
@@ -461,6 +500,8 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
 
 - (void)reloadFromLoadedString
 {
+    if (self.isDirectory) return;
+
     if (self.loadedString && self.editor && self.renderer && self.highlighter)
     {
         self.editor.string = self.loadedString;
@@ -535,6 +576,96 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
         }
     }
     return [super writeToURL:url ofType:typeName error:outError];
+}
+
+- (BOOL)readFromURL:(NSURL *)url ofType:(NSString *)typeName error:(NSError *__autoreleasing *)outError
+{
+    NSNumber *isDirectory = nil;
+    [url getResourceValue:&isDirectory forKey:NSURLIsDirectoryKey error:NULL];
+    
+    if ([isDirectory boolValue])
+    {
+        self.isDirectory = YES;
+        self.rootDirectoryURL = url;
+        // Load files
+        [self reloadSidebarItems];
+        return YES;
+    }
+    
+    return [super readFromURL:url ofType:typeName error:outError];
+}
+
+- (void)reloadSidebarItems
+{
+    if (!self.rootDirectoryURL) return;
+    
+    NSMutableArray *items = [NSMutableArray array];
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSDirectoryEnumerator *enumerator = [fm enumeratorAtURL:self.rootDirectoryURL
+                                 includingPropertiesForKeys:@[NSURLIsDirectoryKey, NSURLNameKey]
+                                                    options:NSDirectoryEnumerationSkipsHiddenFiles
+                                               errorHandler:nil];
+    
+    for (NSURL *fileURL in enumerator) {
+        // Simple flat list for now, or maybe just top level?
+        // User asked for "file tree". Flat list is easier to start with, but tree is better.
+        // Let's do a simple recursive scan or just list all md files.
+        // For a proper tree, we need a tree data structure.
+        // For MVP, let's just list all files in the folder flattened or just top level.
+        // Let's do top level for now to verify.
+    }
+    
+    // Better approach: just store the root URL and let the outline view datasource handle it?
+    // Or build a simple item structure.
+    
+    // Let's implement a simple file item helper class or just use NSDictionaries.
+    // { "name": "foo.md", "url": url, "children": [] }
+    
+    self.sidebarItems = [self contentsOfDirectory:self.rootDirectoryURL];
+    [self.sidebarOutlineView reloadData];
+}
+
+- (NSArray *)contentsOfDirectory:(NSURL *)directoryURL
+{
+    NSMutableArray *items = [NSMutableArray array];
+    NSFileManager *fm = [NSFileManager defaultManager];
+    
+    NSArray *urls = [fm contentsOfDirectoryAtURL:directoryURL
+                      includingPropertiesForKeys:@[NSURLIsDirectoryKey, NSURLNameKey]
+                                         options:NSDirectoryEnumerationSkipsHiddenFiles
+                                           error:nil];
+    
+    for (NSURL *url in urls) {
+        NSMutableDictionary *item = [NSMutableDictionary dictionary];
+        item[@"url"] = url;
+        item[@"name"] = url.lastPathComponent;
+        
+        NSNumber *isDir = nil;
+        [url getResourceValue:&isDir forKey:NSURLIsDirectoryKey error:nil];
+        if ([isDir boolValue]) {
+            item[@"isDirectory"] = @YES;
+            // Lazy load children? Or load now?
+            // For simplicity, let's load now.
+            item[@"children"] = [self contentsOfDirectory:url];
+        } else {
+            item[@"isDirectory"] = @NO;
+            if (![url.pathExtension.lowercaseString isEqualToString:@"md"] &&
+                ![url.pathExtension.lowercaseString isEqualToString:@"markdown"]) {
+                continue; // Only show markdown files? Or all? User said "read a markdown book".
+            }
+        }
+        [items addObject:item];
+    }
+    
+    // Sort items: directories first, then files.
+    [items sortUsingComparator:^NSComparisonResult(NSDictionary *obj1, NSDictionary *obj2) {
+        BOOL dir1 = [obj1[@"isDirectory"] boolValue];
+        BOOL dir2 = [obj2[@"isDirectory"] boolValue];
+        if (dir1 != dir2) return dir1 ? NSOrderedAscending : NSOrderedDescending;
+        return [obj1[@"name"] compare:obj2[@"name"]];
+    }];
+    
+    return items;
 }
 
 - (NSData *)dataOfType:(NSString *)typeName error:(NSError **)outError
@@ -1064,6 +1195,9 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
     }
 
     NSURL *baseUrl = self.fileURL;
+    if (self.isDirectory && self.currentEditingURL) {
+        baseUrl = self.currentEditingURL;
+    }
     if (!baseUrl)   // Unsaved doument; just use the default URL.
         baseUrl = self.preferences.htmlDefaultDirectoryUrl;
 
@@ -1944,6 +2078,10 @@ current file somewhere to enable this feature.", \
     
     if (reachable)
     {
+        if (self.isDirectory && file && [url.path hasPrefix:self.rootDirectoryURL.path]) {
+             [self loadFile:url];
+             return;
+        }
         [[NSWorkspace sharedWorkspace] openURL:url];
         return;
     }
@@ -2011,6 +2149,103 @@ current file somewhere to enable this feature.", \
             [invocation setArgument:&ok atIndex:1];
             [invocation invoke];
         }
+    }
+}
+
+#pragma mark - Folder Support
+
+- (void)saveToURL:(NSURL *)url ofType:(NSString *)typeName forSaveOperation:(NSSaveOperationType)saveOperation completionHandler:(void (^)(NSError * _Nullable))completionHandler
+{
+    if (self.isDirectory) {
+        if (self.currentEditingURL) {
+            // Ensure newline if needed
+            if (self.preferences.editorEnsuresNewlineAtEndOfFile)
+            {
+                NSCharacterSet *newline = [NSCharacterSet newlineCharacterSet];
+                NSString *text = self.editor.string;
+                NSUInteger end = text.length;
+                if (end && ![newline characterIsMember:[text characterAtIndex:end - 1]])
+                {
+                    NSRange selection = self.editor.selectedRange;
+                    [self.editor insertText:@"\n" replacementRange:NSMakeRange(end, 0)];
+                    self.editor.selectedRange = selection;
+                }
+            }
+            
+            NSError *error = nil;
+            BOOL success = [self.editor.string writeToURL:self.currentEditingURL atomically:YES encoding:NSUTF8StringEncoding error:&error];
+            if (success) {
+                [self updateChangeCount:NSChangeCleared];
+            }
+            if (completionHandler) {
+                completionHandler(error);
+            }
+            return;
+        } else {
+             if (completionHandler) completionHandler(nil);
+             return;
+        }
+    }
+    [super saveToURL:url ofType:typeName forSaveOperation:saveOperation completionHandler:completionHandler];
+}
+
+#pragma mark - Sidebar
+
+- (NSInteger)outlineView:(NSOutlineView *)outlineView numberOfChildrenOfItem:(id)item
+{
+    if (item == nil) {
+        return self.sidebarItems.count;
+    }
+    NSDictionary *dict = item;
+    return [dict[@"children"] count];
+}
+
+- (BOOL)outlineView:(NSOutlineView *)outlineView isItemExpandable:(id)item
+{
+    NSDictionary *dict = item;
+    return [dict[@"isDirectory"] boolValue];
+}
+
+- (id)outlineView:(NSOutlineView *)outlineView child:(NSInteger)index ofItem:(id)item
+{
+    if (item == nil) {
+        return self.sidebarItems[index];
+    }
+    NSDictionary *dict = item;
+    return dict[@"children"][index];
+}
+
+- (id)outlineView:(NSOutlineView *)outlineView objectValueForTableColumn:(NSTableColumn *)tableColumn byItem:(id)item
+{
+    NSDictionary *dict = item;
+    return dict[@"name"];
+}
+
+- (void)outlineViewSelectionDidChange:(NSNotification *)notification
+{
+    NSInteger row = [self.sidebarOutlineView selectedRow];
+    if (row < 0) return;
+    
+    NSDictionary *item = [self.sidebarOutlineView itemAtRow:row];
+    if ([item[@"isDirectory"] boolValue]) return;
+    
+    NSURL *url = item[@"url"];
+    [self loadFile:url];
+}
+
+- (void)loadFile:(NSURL *)url
+{
+    NSError *error = nil;
+    NSString *content = [NSString stringWithContentsOfURL:url encoding:NSUTF8StringEncoding error:&error];
+    if (content) {
+        self.currentEditingURL = url;
+        self.editor.string = content;
+        
+        // Reset change count for the new file
+        [self updateChangeCount:NSChangeCleared];
+        
+        [self.renderer parseAndRenderNow];
+        [self.highlighter parseAndHighlightNow];
     }
 }
 

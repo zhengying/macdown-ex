@@ -19,4 +19,8 @@
 @property (nonatomic, readwrite) NSString *markdown;
 @property (nonatomic, readonly) NSString *html;
 
+@property (nonatomic, assign) BOOL isDirectory;
+@property (nonatomic, strong) NSURL *rootDirectoryURL;
+@property (nonatomic, strong) NSURL *currentEditingURL;
+
 @end

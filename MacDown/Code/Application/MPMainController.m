@@ -91,12 +91,26 @@ NS_INLINE void treat()
 }
 
 
+@interface MPDocumentController : NSDocumentController
+@end
+
+@implementation MPDocumentController
+- (NSInteger)runModalOpenPanel:(NSOpenPanel *)openPanel forTypes:(NSArray<NSString *> *)types
+{
+    openPanel.canChooseDirectories = YES;
+    openPanel.canChooseFiles = YES;
+    return [super runModalOpenPanel:openPanel forTypes:types];
+}
+@end
+
+
 @interface MPMainController ()
 @property (readonly) NSWindowController *preferencesWindowController;
 @end
 
 
 @implementation MPMainController
+
 
 @synthesize preferencesWindowController = _preferencesWindowController;
 
@@ -260,7 +274,27 @@ NS_INLINE void treat()
 }
 
 
+- (BOOL)application:(NSApplication *)sender openFile:(NSString *)filename
+{
+    NSURL *url = [NSURL fileURLWithPath:filename];
+    
+    // Explicitly check for directory
+    NSNumber *isDirectory = nil;
+    [url getResourceValue:&isDirectory forKey:NSURLIsDirectoryKey error:NULL];
+    if ([isDirectory boolValue]) {
+        [[NSDocumentController sharedDocumentController] openDocumentWithContentsOfURL:url display:YES completionHandler:^(NSDocument * _Nullable document, BOOL documentWasAlreadyOpen, NSError * _Nullable error) {
+            if (error) {
+                NSLog(@"Error opening folder: %@", error);
+            }
+        }];
+        return YES;
+    }
+    
+    return NO;
+}
+
 #pragma mark - SUUpdaterDelegate
+
 
 - (NSString *)feedURLStringForUpdater:(SUUpdater *)updater
 {

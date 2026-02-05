@@ -10,5 +10,11 @@
 
 int main(int argc, const char * argv[])
 {
+    // Initialize custom document controller if available
+    Class docControllerClass = NSClassFromString(@"MPDocumentController");
+    if (docControllerClass) {
+        [docControllerClass performSelector:@selector(sharedDocumentController)];
+    }
+    
     return NSApplicationMain(argc, argv);
 }
