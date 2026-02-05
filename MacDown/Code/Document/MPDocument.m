@@ -642,30 +642,49 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
         
         NSNumber *isDir = nil;
         [url getResourceValue:&isDir forKey:NSURLIsDirectoryKey error:nil];
+        item[@"isDirectory"] = isDir;
+        
         if ([isDir boolValue]) {
-            item[@"isDirectory"] = @YES;
-            // Lazy load children? Or load now?
-            // For simplicity, let's load now.
             item[@"children"] = [self contentsOfDirectory:url];
-        } else {
-            item[@"isDirectory"] = @NO;
-            if (![url.pathExtension.lowercaseString isEqualToString:@"md"] &&
-                ![url.pathExtension.lowercaseString isEqualToString:@"markdown"]) {
-                continue; // Only show markdown files? Or all? User said "read a markdown book".
-            }
         }
         [items addObject:item];
     }
     
-    // Sort items: directories first, then files.
+    // Sort items: MD files first, then directories, then others.
     [items sortUsingComparator:^NSComparisonResult(NSDictionary *obj1, NSDictionary *obj2) {
+        NSString *name1 = obj1[@"name"];
+        NSString *name2 = obj2[@"name"];
+        BOOL md1 = [name1.pathExtension.lowercaseString isEqualToString:@"md"] || [name1.pathExtension.lowercaseString isEqualToString:@"markdown"];
+        BOOL md2 = [name2.pathExtension.lowercaseString isEqualToString:@"md"] || [name2.pathExtension.lowercaseString isEqualToString:@"markdown"];
+        
+        // Priority 1: Markdown Files
+        if (md1 != md2) return md1 ? NSOrderedAscending : NSOrderedDescending;
+        
+        // Priority 2: Directories
         BOOL dir1 = [obj1[@"isDirectory"] boolValue];
         BOOL dir2 = [obj2[@"isDirectory"] boolValue];
         if (dir1 != dir2) return dir1 ? NSOrderedAscending : NSOrderedDescending;
-        return [obj1[@"name"] compare:obj2[@"name"]];
+        
+        // Priority 3: Name
+        return [name1 compare:name2 options:NSNumericSearch];
     }];
     
     return items;
+}
+
+- (void)outlineView:(NSOutlineView *)outlineView willDisplayCell:(id)cell forTableColumn:(NSTableColumn *)tableColumn item:(id)item
+{
+    NSDictionary *dict = item;
+    NSString *name = dict[@"name"];
+    BOOL isMD = [name.pathExtension.lowercaseString isEqualToString:@"md"] || [name.pathExtension.lowercaseString isEqualToString:@"markdown"];
+    
+    if ([cell respondsToSelector:@selector(setTextColor:)]) {
+        if (!isMD) {
+            [cell setTextColor:[NSColor grayColor]];
+        } else {
+            [cell setTextColor:[NSColor controlTextColor]];
+        }
+    }
 }
 
 - (NSData *)dataOfType:(NSString *)typeName error:(NSError **)outError

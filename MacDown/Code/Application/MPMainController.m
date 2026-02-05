@@ -277,20 +277,12 @@ NS_INLINE void treat()
 - (BOOL)application:(NSApplication *)sender openFile:(NSString *)filename
 {
     NSURL *url = [NSURL fileURLWithPath:filename];
-    
-    // Explicitly check for directory
-    NSNumber *isDirectory = nil;
-    [url getResourceValue:&isDirectory forKey:NSURLIsDirectoryKey error:NULL];
-    if ([isDirectory boolValue]) {
-        [[NSDocumentController sharedDocumentController] openDocumentWithContentsOfURL:url display:YES completionHandler:^(NSDocument * _Nullable document, BOOL documentWasAlreadyOpen, NSError * _Nullable error) {
-            if (error) {
-                NSLog(@"Error opening folder: %@", error);
-            }
-        }];
-        return YES;
-    }
-    
-    return NO;
+    [[NSDocumentController sharedDocumentController] openDocumentWithContentsOfURL:url display:YES completionHandler:^(NSDocument * _Nullable document, BOOL documentWasAlreadyOpen, NSError * _Nullable error) {
+        if (error) {
+            NSLog(@"Error opening file: %@", error);
+        }
+    }];
+    return YES;
 }
 
 #pragma mark - SUUpdaterDelegate
