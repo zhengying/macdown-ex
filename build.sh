@@ -33,11 +33,15 @@ echo "🏗️  Building MacDown.xcworkspace..."
 # -scheme: The scheme to build (MacDown)
 # -configuration: Release (usually what you want for a "build")
 # -derivedDataPath: Keep build artifacts in a known location (optional, but good for CI/scripts)
+# ARCHS="x86_64 arm64": Build for both Intel and Apple Silicon
+# ONLY_ACTIVE_ARCH=NO: Ensure we build all architectures, not just the one matching the current machine
 
 xcodebuild \
   -workspace MacDown.xcworkspace \
   -scheme MacDown \
   -configuration Release \
+  ARCHS="x86_64 arm64" \
+  ONLY_ACTIVE_ARCH=NO \
   clean build \
   | xcpretty || echo "xcpretty not found, showing raw output" # Pipe to xcpretty if available for nicer output
 

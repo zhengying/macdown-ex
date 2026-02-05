@@ -11,6 +11,10 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
       config.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '10.13'
+      # Ensure both architectures are supported
+      config.build_settings['ARCHS'] = '$(ARCHS_STANDARD)'
+      # Ensure we don't only build for the active architecture (so we get both x86_64 and arm64)
+      config.build_settings['ONLY_ACTIVE_ARCH'] = 'NO'
     end
   end
 end
