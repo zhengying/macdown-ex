@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+set -o pipefail
 
 # MacDown Build Script
 
@@ -36,13 +37,23 @@ echo "🏗️  Building MacDown.xcworkspace..."
 # ARCHS="x86_64 arm64": Build for both Intel and Apple Silicon
 # ONLY_ACTIVE_ARCH=NO: Ensure we build all architectures, not just the one matching the current machine
 
-xcodebuild \
-  -workspace MacDown.xcworkspace \
-  -scheme MacDown \
-  -configuration Release \
-  ARCHS="x86_64 arm64" \
-  ONLY_ACTIVE_ARCH=NO \
-  clean build \
-  | xcpretty || echo "xcpretty not found, showing raw output" # Pipe to xcpretty if available for nicer output
+if command -v xcpretty &> /dev/null; then
+  xcodebuild \
+    -workspace MacDown.xcworkspace \
+    -scheme MacDown \
+    -configuration Release \
+    ARCHS="x86_64 arm64" \
+    ONLY_ACTIVE_ARCH=NO \
+    clean build \
+    | xcpretty
+else
+  xcodebuild \
+    -workspace MacDown.xcworkspace \
+    -scheme MacDown \
+    -configuration Release \
+    ARCHS="x86_64 arm64" \
+    ONLY_ACTIVE_ARCH=NO \
+    clean build
+fi
 
 echo "✅ Build completed successfully!"
