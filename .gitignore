@@ -59,7 +59,7 @@
 # NB: slash on the end, so we only remove the FOLDER, not any files that were badly named "DerivedData"
 
 DerivedData/
-
+.deriveddata/
 # NB: slash on the end, so we only remove the FOLDER, not any files that were badly named "build"
 
 build/
@@ -190,3 +190,8 @@ MacDown/Resources/Prism/*
 # Vendor directory (gems etc)
 vendor/
 .bundle/
+*~
+*.swp
+*.swo
+.*.sw*
+[._]*.un~

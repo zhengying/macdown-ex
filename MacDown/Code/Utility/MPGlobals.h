@@ -16,14 +16,3 @@ static NSString * const kMPApplicationBundleIdentifier = @"com.uranusjr.macdown-
 #else
 static NSString * const kMPApplicationBundleIdentifier = @"com.uranusjr.macdown";
 #endif
-
-static NSString * const kMPApplicationSuiteName = @"com.uranusjr.macdown";
-
-static NSString * const MPCommandInstallationPath = @"/usr/local/bin/macdown";
-static NSString * const kMPCommandName = @"macdown";
-
-static NSString * const kMPHelpKey = @"help";
-static NSString * const kMPVersionKey = @"version";
-
-static NSString * const kMPFilesToOpenKey = @"filesToOpenOnNextLaunch";
-static NSString * const kMPPipedContentFileToOpen = @"pipedContentFileToOpenOnNextLaunch";

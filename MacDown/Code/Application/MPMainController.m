@@ -18,7 +18,6 @@
 #import "MPMarkdownPreferencesViewController.h"
 #import "MPEditorPreferencesViewController.h"
 #import "MPHtmlPreferencesViewController.h"
-#import "MPTerminalPreferencesViewController.h"
 #import "MPDocument.h"
 
 
@@ -212,7 +211,6 @@ NS_INLINE void treat()
             [[MPMarkdownPreferencesViewController alloc] init],
             [[MPEditorPreferencesViewController alloc] init],
             [[MPHtmlPreferencesViewController alloc] init],
-            [[MPTerminalPreferencesViewController alloc] init],
         ];
         NSString *title = NSLocalizedString(@"Preferences",
                                             @"Preferences window title.");
@@ -261,15 +259,11 @@ NS_INLINE void treat()
 
 - (BOOL)applicationShouldOpenUntitledFile:(NSApplication *)sender
 {
-    if (self.preferences.filesToOpen.count || self.preferences.pipedContentFileToOpen)
-        return NO;
     return !self.preferences.supressesUntitledDocumentOnLaunch;
 }
 
 - (void)applicationDidBecomeActive:(NSNotification *)notification
 {
-    [self openPendingPipedContent];
-    [self openPendingFiles];
     treat();
 }
 
@@ -334,49 +328,6 @@ NS_INLINE void treat()
         }
     }
 }
-
-- (void)openPendingFiles
-{
-    NSDocumentController *c = [NSDocumentController sharedDocumentController];
-
-    for (NSString *path in self.preferences.filesToOpen)
-    {
-        NSURL *url = [NSURL fileURLWithPath:path];
-        if ([url checkResourceIsReachableAndReturnError:NULL])
-        {
-            [c openDocumentWithContentsOfURL:url display:YES
-                           completionHandler:MPDocumentOpenCompletionEmpty];
-        }
-        else
-        {
-            [c createNewEmptyDocumentForURL:url display:YES error:NULL];
-        }
-    }
-
-    self.preferences.filesToOpen = nil;
-    [self.preferences synchronize];
-}
-
-- (void)openPendingPipedContent {
-    NSDocumentController *c = [NSDocumentController sharedDocumentController];
-
-    if (self.preferences.pipedContentFileToOpen) {
-        NSURL *pipedContentFileToOpenURL = [NSURL fileURLWithPath:self.preferences.pipedContentFileToOpen];
-        NSError *readPipedContentError;
-        NSString *pipedContentString = [NSString stringWithContentsOfURL:pipedContentFileToOpenURL encoding:NSUTF8StringEncoding error:&readPipedContentError];
-
-        NSError *openDocumentError;
-        MPDocument *document = (MPDocument *)[c openUntitledDocumentAndDisplay:YES error:&openDocumentError];
-
-        if (document && openDocumentError == nil && readPipedContentError == nil) {
-            document.markdown = pipedContentString;
-        }
-
-        self.preferences.pipedContentFileToOpen = nil;
-        [self.preferences synchronize];
-    }
-}
-
 
 #pragma mark - Notification handler
 
