@@ -7,6 +7,7 @@
 //
 
 #import "MPEditorView.h"
+#import <AppKit/NSDocumentController.h>
 
 
 NS_INLINE BOOL MPAreRectsEqual(NSRect r1, NSRect r2)
@@ -51,6 +52,22 @@ NS_INLINE BOOL MPAreRectsEqual(NSRect r1, NSRect r2)
     sourceDragMask = [sender draggingSourceOperationMask];
     pboard = [sender draggingPasteboard];
     
+    if ([[pboard types] containsObject:NSFilenamesPboardType]) {
+        NSArray *files = [pboard propertyListForType:NSFilenamesPboardType];
+        if (files.count) {
+            BOOL isDir = NO;
+            if ([[NSFileManager defaultManager] fileExistsAtPath:files[0] isDirectory:&isDir] && isDir) {
+                if (sourceDragMask & NSDragOperationLink) {
+                    return NSDragOperationLink;
+                }
+                if (sourceDragMask & NSDragOperationCopy) {
+                    return NSDragOperationCopy;
+                }
+                return NSDragOperationCopy;
+            }
+        }
+    }
+    
     if ([pboard canReadItemWithDataConformingToTypes:[NSArray arrayWithObjects:@"public.jpeg", nil]]) {
         if (sourceDragMask & NSDragOperationLink) {
             return NSDragOperationLink;
@@ -67,10 +84,31 @@ NS_INLINE BOOL MPAreRectsEqual(NSRect r1, NSRect r2)
     NSDragOperation sourceDragMask;
     
     sourceDragMask = [sender draggingSourceOperationMask];
+    (void)sourceDragMask;
     pboard = [sender draggingPasteboard];
     
     if ( [[pboard types] containsObject:NSFilenamesPboardType] ) {
         NSArray *files = [pboard propertyListForType:NSFilenamesPboardType];
+        NSMutableArray<NSURL *> *directoryURLs = [NSMutableArray array];
+        NSFileManager *fm = [NSFileManager defaultManager];
+        for (NSString *path in files) {
+            BOOL isDir = NO;
+            if ([fm fileExistsAtPath:path isDirectory:&isDir] && isDir) {
+                [directoryURLs addObject:[NSURL fileURLWithPath:path]];
+            }
+        }
+        
+        if (directoryURLs.count) {
+            NSDocumentController *controller = [NSDocumentController sharedDocumentController];
+            for (NSURL *url in directoryURLs) {
+                [controller openDocumentWithContentsOfURL:url display:YES completionHandler:^(NSDocument *document, BOOL documentWasAlreadyOpen, NSError *error) {
+                    (void)document;
+                    (void)documentWasAlreadyOpen;
+                    (void)error;
+                }];
+            }
+            return YES;
+        }
         
         /* Load data of file. */
         NSError *error;
