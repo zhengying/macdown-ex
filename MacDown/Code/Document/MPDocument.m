@@ -291,19 +291,19 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
 
 - (BOOL)previewVisible
 {
-    return (self.preview.frame.size.width != 0.0);
+    return (!self.preview.isHidden && self.preview.frame.size.width != 0.0);
 }
 
 - (BOOL)editorVisible
 {
-    return (self.editorContainer.frame.size.width != 0.0);
+    return (!self.editorContainer.isHidden && self.editorContainer.frame.size.width != 0.0);
 }
 
 - (BOOL)markdownOutlineVisible
 {
     if (!self.markdownOutlineScrollView)
         return NO;
-    return (self.markdownOutlineScrollView.frame.size.width > 1.0);
+    return (!self.markdownOutlineScrollView.isHidden && self.markdownOutlineScrollView.frame.size.width > 1.0);
 }
 
 - (BOOL)needsHtml
@@ -375,6 +375,7 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
 {
     [super windowControllerDidLoadNib:controller];
 
+    self.splitView.delegate = self;
     self.markdownOutlineContainerSplitView = nil;
     self.markdownOutlineScrollView = nil;
     self.markdownOutlinePreviousWidth = 0.0;
@@ -451,6 +452,7 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
         [outerSplitView setPosition:outlineDividerPosition ofDividerAtIndex:1];
 
         self.markdownOutlineContainerSplitView = outerSplitView;
+        self.markdownOutlineContainerSplitView.delegate = self;
     }
     else
     {
@@ -495,6 +497,7 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
         [outerSplitView adjustSubviews];
 
         self.markdownOutlineContainerSplitView = outerSplitView;
+        self.markdownOutlineContainerSplitView.delegate = self;
     }
 
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
@@ -1079,7 +1082,6 @@ static BOOL MPIsSetextUnderline(NSString *trimmedLine, NSUInteger *levelOut)
     else if (action == @selector(togglePreviewPane:))
     {
         NSMenuItem *it = ((NSMenuItem *)item);
-        it.hidden = (!self.previewVisible && self.previousSplitRatio < 0.0);
         it.title = self.previewVisible ?
             NSLocalizedString(@"Hide Preview Pane",
                               @"Toggle preview pane menu item") :
@@ -1116,6 +1118,22 @@ static BOOL MPIsSetextUnderline(NSString *trimmedLine, NSUInteger *levelOut)
 {
     [self redrawDivider];
     self.editor.editable = self.editorVisible;
+}
+
+- (BOOL)splitView:(NSSplitView *)splitView shouldHideDividerAtIndex:(NSInteger)dividerIndex
+{
+    NSArray *subviews = splitView.subviews;
+    if (dividerIndex < 0 || dividerIndex >= (NSInteger)subviews.count - 1)
+        return NO;
+
+    NSView *left = subviews[dividerIndex];
+    NSView *right = subviews[dividerIndex + 1];
+    if (left.isHidden || right.isHidden)
+        return YES;
+
+    if (splitView.isVertical)
+        return (left.frame.size.width < 1.0 || right.frame.size.width < 1.0);
+    return (left.frame.size.height < 1.0 || right.frame.size.height < 1.0);
 }
 
 
@@ -1924,16 +1942,22 @@ static BOOL MPIsSetextUnderline(NSString *trimmedLine, NSUInteger *levelOut)
     if (totalWidth <= 0.0)
         return;
 
-    if (self.markdownOutlineScrollView.frame.size.width > 1.0)
+    if (self.markdownOutlineVisible)
     {
         self.markdownOutlinePreviousWidth = self.markdownOutlineScrollView.frame.size.width;
-        [self.markdownOutlineContainerSplitView setPosition:(totalWidth - 1.0) ofDividerAtIndex:dividerIndex];
+        self.markdownOutlineScrollView.hidden = YES;
+
+        CGFloat collapsePosition = totalWidth - self.markdownOutlineContainerSplitView.dividerThickness;
+        [self.markdownOutlineContainerSplitView setPosition:collapsePosition ofDividerAtIndex:dividerIndex];
+        [self.markdownOutlineContainerSplitView adjustSubviews];
     }
     else
     {
         if (self.markdownOutlinePreviousWidth <= 0.0)
             self.markdownOutlinePreviousWidth = 220.0;
+        self.markdownOutlineScrollView.hidden = NO;
         [self applyMarkdownOutlineDividerPositionIfNeeded];
+        [self.markdownOutlineContainerSplitView adjustSubviews];
     }
 }
 
@@ -1948,6 +1972,10 @@ static BOOL MPIsSetextUnderline(NSString *trimmedLine, NSUInteger *levelOut)
 - (void)applyMarkdownOutlineDividerPositionIfNeeded
 {
     if (!self.markdownOutlineContainerSplitView)
+        return;
+    if (!self.markdownOutlineScrollView)
+        return;
+    if (self.markdownOutlineScrollView.isHidden)
         return;
     NSArray *subviews = self.markdownOutlineContainerSplitView.subviews;
     if (subviews.count < 2)
@@ -1986,25 +2014,40 @@ static BOOL MPIsSetextUnderline(NSString *trimmedLine, NSUInteger *levelOut)
 
     if (isVisible)
     {
-        CGFloat oldRatio = self.splitView.dividerLocation;
-        if (oldRatio != 0.0 && oldRatio != 1.0)
+        if (self.editorVisible && self.previewVisible)
         {
-            // We don't want to save these values, since they are meaningless.
-            // The user should be able to switch between 100% editor and 100%
-            // preview without losing the old ratio.
-            self.previousSplitRatio = oldRatio;
+            CGFloat oldRatio = self.splitView.dividerLocation;
+            if (oldRatio != 0.0 && oldRatio != 1.0)
+                self.previousSplitRatio = oldRatio;
+        }
+
+        if (forEditorPane)
+        {
+            self.editorContainer.hidden = YES;
+            self.preview.hidden = NO;
+        }
+        else
+        {
+            self.preview.hidden = YES;
+            self.editorContainer.hidden = NO;
         }
         [self setSplitViewDividerLocation:targetRatio];
+        [self.splitView adjustSubviews];
     }
     else
     {
-        // We have an inconsistency here, let's just go back to 0.5,
-        // otherwise nothing will happen
+        self.preview.hidden = NO;
+        self.editorContainer.hidden = NO;
+
         if (self.previousSplitRatio < 0.0)
             self.previousSplitRatio = 0.5;
 
         [self setSplitViewDividerLocation:self.previousSplitRatio];
+        [self.splitView adjustSubviews];
     }
+
+    [self.splitView setNeedsDisplay:YES];
+    [self redrawDivider];
 }
 
 - (void)setupEditor:(NSString *)changedKey
