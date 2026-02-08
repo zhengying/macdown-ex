@@ -334,7 +334,7 @@
 		1F9F35232099A1FC00C4B4F1 /* sk-SK */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "sk-SK"; path = "Localization/sk-SK.lproj/MPMarkdownPreferencesViewController.strings"; sourceTree = "<group>"; };
 		1F9F35242099A1FC00C4B4F1 /* sk-SK */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "sk-SK"; path = "Localization/sk-SK.lproj/MPDocument.strings"; sourceTree = "<group>"; };
 		1FA6CDB81952D2CD008D5CA0 /* dsa_pub.pem */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; name = dsa_pub.pem; path = Resources/dsa_pub.pem; sourceTree = "<group>"; };
-		1FA6DE211941CC9E000409FB /* MacDown.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MacDown.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1FA6DE211941CC9E000409FB /* MacDownEx.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MacDownEx.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1FA6DE241941CC9E000409FB /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = System/Library/Frameworks/Cocoa.framework; sourceTree = SDKROOT; };
 		1FA6DE271941CC9E000409FB /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
 		1FA6DE281941CC9E000409FB /* CoreData.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreData.framework; path = System/Library/Frameworks/CoreData.framework; sourceTree = SDKROOT; };
@@ -672,7 +672,7 @@
 		1FA6DE221941CC9E000409FB /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				1FA6DE211941CC9E000409FB /* MacDown.app */,
+				1FA6DE211941CC9E000409FB /* MacDownEx.app */,
 				1FA6DE451941CC9E000409FB /* MacDownTests.xctest */,
 			);
 			name = Products;
@@ -820,7 +820,7 @@
 			);
 			name = MacDown;
 			productName = MarkPad;
-			productReference = 1FA6DE211941CC9E000409FB /* MacDown.app */;
+			productReference = 1FA6DE211941CC9E000409FB /* MacDownEx.app */;
 			productType = "com.apple.product-type.application";
 		};
 		1FA6DE441941CC9E000409FB /* MacDownTests */ = {
@@ -1590,7 +1590,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.13;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.uranusjr.${PRODUCT_NAME:rfc1034identifier:lower}-debug";
-				PRODUCT_NAME = MacDown;
+				PRODUCT_NAME = MacDownEx;
 				SDKROOT = macosx;
 				WRAPPER_EXTENSION = app;
 			};
@@ -1613,7 +1613,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.13;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.uranusjr.${PRODUCT_NAME:rfc1034identifier:lower}";
-				PRODUCT_NAME = MacDown;
+				PRODUCT_NAME = MacDownEx;
 				SDKROOT = macosx;
 				WRAPPER_EXTENSION = app;
 			};
@@ -1623,7 +1623,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 8CDC5EA0050D2F722FB1AADD /* Pods-MacDownTests.debug.xcconfig */;
 			buildSettings = {
-				BUNDLE_LOADER = "$(BUILT_PRODUCTS_DIR)/MacDown.app/Contents/MacOS/MacDown";
+				BUNDLE_LOADER = "$(BUILT_PRODUCTS_DIR)/MacDownEx.app/Contents/MacOS/MacDownEx";
 				CLANG_ENABLE_MODULES = NO;
 				COMBINE_HIDPI_IMAGES = YES;
 				FRAMEWORK_SEARCH_PATHS = (
@@ -1653,7 +1653,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 0D0EC0DE9FEA22F962083921 /* Pods-MacDownTests.release.xcconfig */;
 			buildSettings = {
-				BUNDLE_LOADER = "$(BUILT_PRODUCTS_DIR)/MacDown.app/Contents/MacOS/MacDown";
+				BUNDLE_LOADER = "$(BUILT_PRODUCTS_DIR)/MacDownEx.app/Contents/MacOS/MacDownEx";
 				CLANG_ENABLE_MODULES = NO;
 				COMBINE_HIDPI_IMAGES = YES;
 				FRAMEWORK_SEARCH_PATHS = (
