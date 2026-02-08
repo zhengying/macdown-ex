@@ -33,6 +33,11 @@
 #import <JavaScriptCore/JavaScriptCore.h>
 
 static NSString * const kMPDefaultAutosaveName = @"Untitled";
+static const CGFloat kMPSidebarMinWidth = 160.0;
+static const CGFloat kMPSidebarMaxWidth = 320.0;
+static const CGFloat kMPMarkdownOutlineMinWidth = 180.0;
+static const CGFloat kMPMarkdownOutlineMaxWidth = 320.0;
+static const CGFloat kMPEditorPreviewMinWidth = 240.0;
 
 
 NS_INLINE NSString *MPEditorPreferenceKeyWithValueKey(NSString *key)
@@ -385,6 +390,9 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
     if (self.isDirectory) {
         NSView *contentView = controller.window.contentView;
         NSView *oldSplitView = self.splitView;
+
+        oldSplitView.translatesAutoresizingMaskIntoConstraints = YES;
+        oldSplitView.autoresizingMask = (NSViewWidthSizable | NSViewHeightSizable);
         
         NSSplitView *outerSplitView = [[NSSplitView alloc] initWithFrame:contentView.bounds];
         [outerSplitView setVertical:YES];
@@ -1140,6 +1148,270 @@ static BOOL MPIsSetextUnderline(NSString *trimmedLine, NSUInteger *levelOut)
     if (splitView.isVertical)
         return (left.frame.size.width < 1.0 || right.frame.size.width < 1.0);
     return (left.frame.size.height < 1.0 || right.frame.size.height < 1.0);
+}
+
+- (CGFloat)splitView:(NSSplitView *)splitView constrainSplitPosition:(CGFloat)proposedPosition ofDividerAtIndex:(NSInteger)dividerIndex
+{
+    if (splitView != self.markdownOutlineContainerSplitView)
+        return proposedPosition;
+
+    NSArray *subviews = splitView.subviews;
+    if (!subviews.count)
+        return proposedPosition;
+    if (!splitView.isVertical)
+        return proposedPosition;
+
+    CGFloat totalWidth = splitView.bounds.size.width;
+    CGFloat dividerThickness = splitView.dividerThickness;
+
+    if (subviews.count >= 3)
+    {
+        NSView *sidebar = subviews[0];
+        NSView *outline = subviews[2];
+
+        if (dividerIndex == 0 && !sidebar.isHidden)
+        {
+            CGFloat minWidth = kMPSidebarMinWidth;
+            CGFloat maxWidth = kMPSidebarMaxWidth;
+            CGFloat outlineReserve = outline.isHidden ? 0.0 : (kMPMarkdownOutlineMinWidth + dividerThickness);
+            CGFloat maxByWindow = totalWidth - dividerThickness - kMPEditorPreviewMinWidth - outlineReserve;
+            if (maxWidth > maxByWindow)
+                maxWidth = maxByWindow;
+            if (maxWidth < minWidth)
+                maxWidth = minWidth;
+            if (proposedPosition < minWidth)
+                proposedPosition = minWidth;
+            if (proposedPosition > maxWidth)
+                proposedPosition = maxWidth;
+        }
+        else if (dividerIndex == 1 && !outline.isHidden)
+        {
+            CGFloat minOutlineWidth = kMPMarkdownOutlineMinWidth;
+            CGFloat maxOutlineWidth = kMPMarkdownOutlineMaxWidth;
+
+            CGFloat minPosition = totalWidth - maxOutlineWidth - dividerThickness;
+            CGFloat middleMinPosition = sidebar.frame.size.width + dividerThickness + kMPEditorPreviewMinWidth;
+            if (minPosition < middleMinPosition)
+                minPosition = middleMinPosition;
+            CGFloat maxPosition = totalWidth - minOutlineWidth - dividerThickness;
+            if (maxPosition < minPosition)
+                maxPosition = minPosition;
+
+            if (proposedPosition < minPosition)
+                proposedPosition = minPosition;
+            if (proposedPosition > maxPosition)
+                proposedPosition = maxPosition;
+        }
+    }
+    else if (subviews.count == 2)
+    {
+        NSView *outline = subviews[1];
+        if (dividerIndex == 0 && !outline.isHidden)
+        {
+            CGFloat minOutlineWidth = kMPMarkdownOutlineMinWidth;
+            CGFloat maxOutlineWidth = kMPMarkdownOutlineMaxWidth;
+
+            CGFloat minPosition = totalWidth - maxOutlineWidth - dividerThickness;
+            if (minPosition < kMPEditorPreviewMinWidth)
+                minPosition = kMPEditorPreviewMinWidth;
+            CGFloat maxPosition = totalWidth - minOutlineWidth - dividerThickness;
+            if (maxPosition < minPosition)
+                maxPosition = minPosition;
+
+            if (proposedPosition < minPosition)
+                proposedPosition = minPosition;
+            if (proposedPosition > maxPosition)
+                proposedPosition = maxPosition;
+        }
+    }
+
+    return proposedPosition;
+}
+
+- (void)splitView:(NSSplitView *)splitView resizeSubviewsWithOldSize:(NSSize)oldSize
+{
+    if (!splitView.isVertical)
+    {
+        [splitView adjustSubviews];
+        return;
+    }
+
+    if (splitView == self.markdownOutlineContainerSplitView)
+    {
+        NSArray *subviews = splitView.subviews;
+        CGFloat totalWidth = splitView.bounds.size.width;
+        CGFloat totalHeight = splitView.bounds.size.height;
+        CGFloat dividerThickness = splitView.dividerThickness;
+
+        if (subviews.count == 2)
+        {
+            NSView *middle = subviews[0];
+            NSView *outline = subviews[1];
+            BOOL outlineVisible = !outline.isHidden;
+
+            CGFloat outlineWidth = outlineVisible ? MIN(outline.frame.size.width, kMPMarkdownOutlineMaxWidth) : 0.0;
+            CGFloat middleWidth = totalWidth - (outlineVisible ? dividerThickness : 0.0) - outlineWidth;
+            if (outlineVisible && middleWidth < kMPEditorPreviewMinWidth)
+            {
+                CGFloat needed = kMPEditorPreviewMinWidth - middleWidth;
+                CGFloat reducible = MAX(0.0, outlineWidth - kMPMarkdownOutlineMinWidth);
+                CGFloat reduce = MIN(needed, reducible);
+                outlineWidth -= reduce;
+                middleWidth = totalWidth - dividerThickness - outlineWidth;
+            }
+            if (!outlineVisible)
+                middleWidth = totalWidth;
+
+            CGFloat x = 0.0;
+            middle.frame = NSMakeRect(x, 0.0, MAX(0.0, middleWidth), totalHeight);
+            x += middle.frame.size.width;
+            if (outlineVisible)
+                x += dividerThickness;
+            outline.frame = NSMakeRect(x, 0.0, MAX(0.0, outlineWidth), totalHeight);
+            if (!outlineVisible)
+                outline.frame = NSMakeRect(totalWidth, 0.0, 0.0, totalHeight);
+
+            if (outlineVisible)
+                [splitView setPosition:middle.frame.size.width ofDividerAtIndex:0];
+            return;
+        }
+
+        if (subviews.count >= 3)
+        {
+            NSView *sidebar = subviews[0];
+            NSView *middle = subviews[1];
+            NSView *outline = subviews[2];
+
+            BOOL sidebarVisible = !sidebar.isHidden;
+            BOOL outlineVisible = !outline.isHidden;
+
+            NSInteger dividerCount = 0;
+            if (sidebarVisible)
+                dividerCount++;
+            if (outlineVisible)
+                dividerCount++;
+
+            CGFloat availableWidth = totalWidth - dividerThickness * dividerCount;
+            if (availableWidth < 0.0)
+                availableWidth = 0.0;
+
+            CGFloat sidebarWidth = sidebarVisible ? MIN(sidebar.frame.size.width, kMPSidebarMaxWidth) : 0.0;
+            CGFloat outlineWidth = outlineVisible ? MIN(outline.frame.size.width, kMPMarkdownOutlineMaxWidth) : 0.0;
+
+            CGFloat middleWidth = availableWidth - sidebarWidth - outlineWidth;
+            if ((sidebarVisible || outlineVisible) && middleWidth < kMPEditorPreviewMinWidth)
+            {
+                CGFloat deficit = kMPEditorPreviewMinWidth - middleWidth;
+                if (outlineVisible)
+                {
+                    CGFloat reducible = MAX(0.0, outlineWidth - kMPMarkdownOutlineMinWidth);
+                    CGFloat reduce = MIN(deficit, reducible);
+                    outlineWidth -= reduce;
+                    deficit -= reduce;
+                }
+                if (sidebarVisible && deficit > 0.0)
+                {
+                    CGFloat reducible = MAX(0.0, sidebarWidth - kMPSidebarMinWidth);
+                    CGFloat reduce = MIN(deficit, reducible);
+                    sidebarWidth -= reduce;
+                    deficit -= reduce;
+                }
+                middleWidth = availableWidth - sidebarWidth - outlineWidth;
+                if (middleWidth < 0.0)
+                    middleWidth = 0.0;
+            }
+
+            CGFloat x = 0.0;
+            sidebar.frame = NSMakeRect(x, 0.0, MAX(0.0, sidebarWidth), totalHeight);
+            if (!sidebarVisible)
+                sidebar.frame = NSMakeRect(0.0, 0.0, 0.0, totalHeight);
+            x += sidebarVisible ? sidebarWidth + dividerThickness : 0.0;
+
+            middle.frame = NSMakeRect(x, 0.0, MAX(0.0, middleWidth), totalHeight);
+            x += middleWidth;
+            x += outlineVisible ? dividerThickness : 0.0;
+
+            outline.frame = NSMakeRect(x, 0.0, MAX(0.0, outlineWidth), totalHeight);
+            if (!outlineVisible)
+                outline.frame = NSMakeRect(totalWidth, 0.0, 0.0, totalHeight);
+
+            if (sidebarVisible)
+                [splitView setPosition:sidebarWidth ofDividerAtIndex:0];
+            if (outlineVisible)
+                [splitView setPosition:totalWidth - outlineWidth - dividerThickness ofDividerAtIndex:1];
+            return;
+        }
+    }
+    else if (splitView == self.splitView)
+    {
+        NSArray *subviews = splitView.subviews;
+        if (subviews.count == 2)
+        {
+            NSView *left = subviews[0];
+            NSView *right = subviews[1];
+
+            BOOL leftVisible = !left.isHidden;
+            BOOL rightVisible = !right.isHidden;
+
+            CGFloat totalWidth = splitView.bounds.size.width;
+            CGFloat totalHeight = splitView.bounds.size.height;
+            CGFloat dividerThickness = splitView.dividerThickness;
+
+            if (!leftVisible && !rightVisible)
+            {
+                left.frame = NSMakeRect(0.0, 0.0, 0.0, totalHeight);
+                right.frame = NSMakeRect(totalWidth, 0.0, 0.0, totalHeight);
+                return;
+            }
+            if (!leftVisible)
+            {
+                right.frame = NSMakeRect(0.0, 0.0, totalWidth, totalHeight);
+                left.frame = NSMakeRect(0.0, 0.0, 0.0, totalHeight);
+                [splitView setPosition:0.0 ofDividerAtIndex:0];
+                return;
+            }
+            if (!rightVisible)
+            {
+                left.frame = NSMakeRect(0.0, 0.0, totalWidth, totalHeight);
+                right.frame = NSMakeRect(totalWidth, 0.0, 0.0, totalHeight);
+                [splitView setPosition:totalWidth - dividerThickness ofDividerAtIndex:0];
+                return;
+            }
+
+            CGFloat oldTotalWidth = oldSize.width - dividerThickness;
+            CGFloat newTotalWidth = totalWidth - dividerThickness;
+
+            CGFloat oldLeftWidth = left.frame.size.width;
+            if (oldLeftWidth < 0.0)
+                oldLeftWidth = 0.0;
+
+            CGFloat delta = newTotalWidth - oldTotalWidth;
+            CGFloat newLeftWidth = oldLeftWidth + floor(delta / 2.0);
+            CGFloat newRightWidth = newTotalWidth - newLeftWidth;
+
+            if (newLeftWidth < kMPEditorPreviewMinWidth)
+            {
+                newLeftWidth = kMPEditorPreviewMinWidth;
+                newRightWidth = newTotalWidth - newLeftWidth;
+            }
+            if (newRightWidth < kMPEditorPreviewMinWidth)
+            {
+                newRightWidth = kMPEditorPreviewMinWidth;
+                newLeftWidth = newTotalWidth - newRightWidth;
+            }
+            if (newLeftWidth < 0.0)
+                newLeftWidth = 0.0;
+            if (newRightWidth < 0.0)
+                newRightWidth = 0.0;
+
+            left.frame = NSMakeRect(0.0, 0.0, MAX(0.0, newLeftWidth), totalHeight);
+            right.frame = NSMakeRect(newLeftWidth + dividerThickness, 0.0, MAX(0.0, newRightWidth), totalHeight);
+            [splitView setPosition:newLeftWidth ofDividerAtIndex:0];
+            return;
+        }
+    }
+
+    [splitView adjustSubviews];
 }
 
 
@@ -2071,18 +2343,25 @@ static BOOL MPIsSetextUnderline(NSString *trimmedLine, NSUInteger *levelOut)
     CGFloat outlineWidth = self.markdownOutlinePreviousWidth;
     if (outlineWidth <= 0.0)
         outlineWidth = 220.0;
+    outlineWidth = MIN(kMPMarkdownOutlineMaxWidth, outlineWidth);
+    outlineWidth = MAX(kMPMarkdownOutlineMinWidth, outlineWidth);
 
-    CGFloat position = totalWidth - outlineWidth;
-    CGFloat minPosition = 200.0;
+    CGFloat dividerThickness = self.markdownOutlineContainerSplitView.dividerThickness;
+    CGFloat position = totalWidth - outlineWidth - dividerThickness;
+    CGFloat minPosition = kMPEditorPreviewMinWidth;
     if (subviews.count >= 3)
     {
         CGFloat leftWidth = ((NSView *)subviews[0]).frame.size.width;
-        minPosition = leftWidth + 200.0;
+        minPosition = leftWidth + dividerThickness + kMPEditorPreviewMinWidth;
     }
+    CGFloat maxPosition = totalWidth - kMPMarkdownOutlineMinWidth - dividerThickness;
+    if (maxPosition < minPosition)
+        maxPosition = minPosition;
+
     if (position < minPosition)
         position = minPosition;
-    if (position > totalWidth - 100.0)
-        position = totalWidth - 100.0;
+    if (position > maxPosition)
+        position = maxPosition;
 
     NSInteger dividerIndex = subviews.count - 2;
     [self.markdownOutlineContainerSplitView setPosition:position ofDividerAtIndex:dividerIndex];

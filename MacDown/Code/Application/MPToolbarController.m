@@ -82,9 +82,9 @@ static CGFloat itemWidth = 37;
         [self toolbarItemWithIdentifier:@"strikethrough" label:NSLocalizedString(@"Strikethrough", @"Strikethrough toolbar button") icon:@"ToolbarIconStrikethrough" action:@selector(toggleStrikethrough:)]
     ];
 
-    [self toolbarItemWithIdentifier:@"toggle-editor-pane" label:NSLocalizedString(@"Editor", @"Toggle editor pane toolbar button") icon:@"ToolbarIconHideEditor" action:@selector(toggleEditorPane:)];
-    [self toolbarItemWithIdentifier:@"toggle-preview-pane" label:NSLocalizedString(@"Preview", @"Toggle preview pane toolbar button") icon:@"ToolbarIconHidePreview" action:@selector(togglePreviewPane:)];
-    [self toolbarItemWithIdentifier:@"toggle-outline-pane" label:NSLocalizedString(@"Outline", @"Toggle outline pane toolbar button") icon:@"ToolbarIconHeading1" action:@selector(toggleOutlinePane:)];
+    [self toolbarItemWithIdentifier:@"toggle-editor-pane" label:NSLocalizedString(@"Editor", @"Toggle editor pane toolbar button") icon:NSImageNameTouchBarComposeTemplate action:@selector(toggleEditorPane:)];
+    [self toolbarItemWithIdentifier:@"toggle-preview-pane" label:NSLocalizedString(@"Preview", @"Toggle preview pane toolbar button") icon:NSImageNameTouchBarQuickLookTemplate action:@selector(togglePreviewPane:)];
+    [self toolbarItemWithIdentifier:@"toggle-outline-pane" label:NSLocalizedString(@"Outline", @"Toggle outline pane toolbar button") icon:NSImageNameTouchBarTextListTemplate action:@selector(toggleOutlinePane:)];
 
     self->toolbarItemIdentifiers = @[
         @"toggle-editor-pane",
