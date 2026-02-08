@@ -199,6 +199,8 @@ typedef NS_ENUM(NSUInteger, MPWordCountType) {
 @property CGFloat markdownOutlinePreviousWidth;
 @property (weak) IBOutlet NSPopUpButton *wordCountWidget;
 @property (strong) IBOutlet MPToolbarController *toolbarController;
+@property (strong) NSView *editorToolbarBar;
+@property (strong) NSStackView *editorToolbarStackView;
 @property (copy, nonatomic) NSString *autosaveName;
 @property (strong) HGMarkdownHighlighter *highlighter;
 @property (strong) MPRenderer *renderer;
@@ -575,6 +577,10 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
     }
 
     self.needsToUnregister = YES;
+
+    [self setupEditorAttachedToolbarBar];
+    if (controller.window.toolbar)
+        controller.window.toolbar.visible = YES;
 
     self.wordsMenuItem = [[NSMenuItem alloc] initWithTitle:@"" action:NULL
                                              keyEquivalent:@""];
@@ -1968,6 +1974,83 @@ static BOOL MPIsSetextUnderline(NSString *trimmedLine, NSUInteger *levelOut)
 
 
 #pragma mark - Private
+
+- (void)setupEditorAttachedToolbarBar
+{
+    if (self.editorToolbarBar)
+        return;
+    if (!self.editorContainer || !self.toolbarController)
+        return;
+
+    NSView *container = self.editorContainer;
+    NSScrollView *editorScrollView = self.editor.enclosingScrollView;
+    if (!editorScrollView)
+        return;
+
+    NSView *bar = [[NSView alloc] initWithFrame:NSZeroRect];
+    bar.translatesAutoresizingMaskIntoConstraints = NO;
+    bar.wantsLayer = YES;
+    bar.layer.backgroundColor = NSColor.windowBackgroundColor.CGColor;
+
+    NSStackView *stack = [[NSStackView alloc] initWithFrame:NSZeroRect];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.orientation = NSUserInterfaceLayoutOrientationHorizontal;
+    stack.alignment = NSLayoutAttributeCenterY;
+    stack.distribution = NSStackViewDistributionFillProportionally;
+    stack.spacing = 4.0;
+
+    NSArray<NSView *> *itemViews = [self.toolbarController editorToolbarItemViews];
+    for (NSView *view in itemViews)
+    {
+        if (view.superview)
+            [view removeFromSuperview];
+        [stack addArrangedSubview:view];
+    }
+
+    [bar addSubview:stack];
+    [container addSubview:bar positioned:NSWindowAbove relativeTo:editorScrollView];
+
+    self.editorToolbarBar = bar;
+    self.editorToolbarStackView = stack;
+
+    NSLayoutConstraint *barHeight = [bar.heightAnchor constraintEqualToConstant:32.0];
+    barHeight.priority = NSLayoutPriorityRequired;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [bar.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
+        [bar.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
+        [bar.topAnchor constraintEqualToAnchor:container.topAnchor],
+        barHeight,
+
+        [stack.leadingAnchor constraintEqualToAnchor:bar.leadingAnchor constant:6.0],
+        [stack.trailingAnchor constraintLessThanOrEqualToAnchor:bar.trailingAnchor constant:-6.0],
+        [stack.centerYAnchor constraintEqualToAnchor:bar.centerYAnchor]
+    ]];
+
+    NSMutableArray<NSLayoutConstraint *> *constraintsToRemove = [NSMutableArray array];
+    for (NSLayoutConstraint *constraint in container.constraints)
+    {
+        BOOL matchesScrollAndContainer =
+            ((constraint.firstItem == editorScrollView && constraint.secondItem == container)
+             || (constraint.firstItem == container && constraint.secondItem == editorScrollView));
+        if (!matchesScrollAndContainer)
+            continue;
+
+        BOOL isTopConstraint =
+            (constraint.firstAttribute == NSLayoutAttributeTop
+             || constraint.secondAttribute == NSLayoutAttributeTop);
+        if (!isTopConstraint)
+            continue;
+
+        [constraintsToRemove addObject:constraint];
+    }
+    if (constraintsToRemove.count)
+        [container removeConstraints:constraintsToRemove];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [editorScrollView.topAnchor constraintEqualToAnchor:bar.bottomAnchor]
+    ]];
+}
 
 - (void)applyMarkdownOutlineDividerPositionIfNeeded
 {

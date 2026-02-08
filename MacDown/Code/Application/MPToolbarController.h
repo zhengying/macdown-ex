@@ -6,11 +6,14 @@
 //  Copyright © 2017 Tzu-ping Chung . All rights reserved.
 //
 
-#import <Foundation/Foundation.h>
-#import "MPDocument.h"
+#import <Cocoa/Cocoa.h>
+
+@class MPDocument;
 
 @interface MPToolbarController : NSObject<NSToolbarDelegate>
 
 @property (weak) IBOutlet MPDocument *document;
+
+- (NSArray<NSView *> *)editorToolbarItemViews;
 
 @end

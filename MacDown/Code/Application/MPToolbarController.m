@@ -7,6 +7,7 @@
 //
 
 #import "MPToolbarController.h"
+#import "MPDocument.h"
 
 // Because we're creating selectors for methods which aren't in this class
 #pragma GCC diagnostic ignored "-Wundeclared-selector"
@@ -47,12 +48,7 @@ static CGFloat itemWidth = 37;
 
 - (void)setupToolbarItems
 {
-    // Set up layout drop down alternatives. title will be set in validateUserInterfaceItem:
-    NSMenuItem *toggleEditorMenuItem = [[NSMenuItem alloc] initWithTitle:@"" action:@selector(toggleEditorPane:) keyEquivalent:@"e"];
-    NSMenuItem *togglePreviewMenuItem = [[NSMenuItem alloc] initWithTitle:@"" action:@selector(togglePreviewPane:) keyEquivalent:@"p"];
-    NSMenuItem *toggleOutlineMenuItem = [[NSMenuItem alloc] initWithTitle:@"" action:@selector(toggleOutlinePane:) keyEquivalent:@"o"];
-    
-    // Set up all available toolbar items
+    // Set up editor-attached toolbar items
     self->toolbarItems = @[
         [self toolbarItemGroupWithIdentifier:@"indent-group" separated:YES label:NSLocalizedString(@"Shift Left/Right", @"") items:@[
             [self toolbarItemWithIdentifier:@"shift-left" label:NSLocalizedString(@"Shift Left", @"Shift text to the left toolbar button") icon:@"ToolbarIconShiftLeft" action:@selector(unindent:)],
@@ -83,16 +79,20 @@ static CGFloat itemWidth = 37;
         [self toolbarItemWithIdentifier:@"copy-html" label:NSLocalizedString(@"Copy HTML", @"Copy HTML toolbar button") icon:@"ToolbarIconCopyHTML" action:@selector(copyHtml:)],
         [self toolbarItemWithIdentifier:@"comment" label:NSLocalizedString(@"Comment", @"Comment toolbar button") icon:@"ToolbarIconComment" action:@selector(toggleComment:)],
         [self toolbarItemWithIdentifier:@"highlight" label:NSLocalizedString(@"Highlight", @"Highlight toolbar button") icon:@"ToolbarIconHighlight" action:@selector(toggleHighlight:)],
-        [self toolbarItemWithIdentifier:@"strikethrough" label:NSLocalizedString(@"Strikethrough", @"Strikethrough toolbar button") icon:@"ToolbarIconStrikethrough" action:@selector(toggleStrikethrough:)],
-        [self toolbarItemWithIdentifier:@"toggle-outline" label:NSLocalizedString(@"Outline", @"Toggle outline toolbar button") icon:@"ToolbarIconHeading1" action:@selector(toggleOutlinePane:)],
-        [self toolbarItemDropDownWithIdentifier:@"layout" label:NSLocalizedString(@"Layout", @"Layout toolbar button") icon:@"ToolbarIconEditorAndPreview" menuItems:
-            @[
-              toggleEditorMenuItem, togglePreviewMenuItem, toggleOutlineMenuItem
-            ]
-        ]
+        [self toolbarItemWithIdentifier:@"strikethrough" label:NSLocalizedString(@"Strikethrough", @"Strikethrough toolbar button") icon:@"ToolbarIconStrikethrough" action:@selector(toggleStrikethrough:)]
     ];
-    
-    self->toolbarItemIdentifiers = [self toolbarItemIdentifiersFromItemsArray:self->toolbarItems];
+
+    [self toolbarItemWithIdentifier:@"toggle-editor-pane" label:NSLocalizedString(@"Editor", @"Toggle editor pane toolbar button") icon:@"ToolbarIconHideEditor" action:@selector(toggleEditorPane:)];
+    [self toolbarItemWithIdentifier:@"toggle-preview-pane" label:NSLocalizedString(@"Preview", @"Toggle preview pane toolbar button") icon:@"ToolbarIconHidePreview" action:@selector(togglePreviewPane:)];
+    [self toolbarItemWithIdentifier:@"toggle-outline-pane" label:NSLocalizedString(@"Outline", @"Toggle outline pane toolbar button") icon:@"ToolbarIconHeading1" action:@selector(toggleOutlinePane:)];
+
+    self->toolbarItemIdentifiers = @[
+        @"toggle-editor-pane",
+        @"toggle-preview-pane",
+        @"toggle-outline-pane",
+        NSToolbarSpaceItemIdentifier,
+        NSToolbarFlexibleSpaceItemIdentifier
+    ];
 }
 
 /**
@@ -101,7 +101,7 @@ static CGFloat itemWidth = 37;
 - (NSArray *)toolbarItemIdentifiersFromItemsArray:(NSArray *)toolbarItemsArray {
     NSMutableArray *orderedIdentifiers = [NSMutableArray new];
     
-    for (NSToolbarItem *item in self->toolbarItems) {
+    for (NSToolbarItem *item in toolbarItemsArray) {
         [orderedIdentifiers addObject:item.itemIdentifier];
     }
     
@@ -127,47 +127,44 @@ static CGFloat itemWidth = 37;
 #pragma mark - NSToolbarDelegate
 - (NSArray<NSString *> *)toolbarDefaultItemIdentifiers:(NSToolbar *)toolbar
 {
-    // From toolbar item dictionary(setupToolbarItems)
-    //NSArray *orderedToolbarItemIdentifiers = [self orderedToolbarDefaultItemKeysForDictionary:self->toolbarItems];
-    NSArray *orderedToolbarItemIdentifiers = [self toolbarItemIdentifiersFromItemsArray:self->toolbarItems];
-    
-    // Mixed identifiers from dictionary and space at below specified indices
-    NSMutableArray *defaultItemIdentifiers = [NSMutableArray new];
-    
-    // Add space after the specified toolbar item indices
-    int spaceAfterIndices[] = {}; // No space in the default set
-    int flexibleSpaceAfterIndices[] = {2, 3, 5, 7, 11};
-    int i = 0;
-    int j = 0;
-    int k = 0;
-    
-    for (NSString *itemIdentifier in orderedToolbarItemIdentifiers)
+    return @[
+        NSToolbarFlexibleSpaceItemIdentifier,
+        @"toggle-editor-pane",
+        @"toggle-preview-pane",
+        @"toggle-outline-pane"
+    ];
+}
+
+- (NSArray<NSView *> *)editorToolbarItemViews
+{
+    NSMutableArray<NSView *> *views = [NSMutableArray array];
+    NSArray<NSString *> *identifiers = [self toolbarItemIdentifiersFromItemsArray:self->toolbarItems];
+
+    for (NSString *identifier in identifiers)
     {
-        // exclude some toolbar items from the default toolbar
-        if ([itemIdentifier  isEqual: @"comment"]
-            || [itemIdentifier  isEqual: @"highlight"]
-            || [itemIdentifier  isEqual: @"strikethrough"]) {
-            // do nothing here
-        }else {
-            [defaultItemIdentifiers addObject:itemIdentifier];
-        }
-        
-        if (i == spaceAfterIndices[j])
+        if ([identifier isEqualToString:NSToolbarFlexibleSpaceItemIdentifier])
+            continue;
+        if ([identifier isEqualToString:@"comment"]
+            || [identifier isEqualToString:@"highlight"]
+            || [identifier isEqualToString:@"strikethrough"])
+            continue;
+        if ([identifier isEqualToString:NSToolbarSpaceItemIdentifier])
         {
-            [defaultItemIdentifiers addObject:NSToolbarSpaceItemIdentifier];
-            j++;
+            NSView *spacer = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 8.0, 1.0)];
+            [views addObject:spacer];
+            continue;
         }
-        
-        if (i == flexibleSpaceAfterIndices[k])
-        {
-            [defaultItemIdentifiers addObject:NSToolbarFlexibleSpaceItemIdentifier];
-            k++;
-        }
-        
-        i++;
+
+        NSToolbarItem *item = self->toolbarItemIdentifierObjectDictionary[identifier];
+        if (!item)
+            continue;
+        if (!item.view)
+            continue;
+
+        [views addObject:item.view];
     }
-    
-    return [defaultItemIdentifiers copy];
+
+    return [views copy];
 }
 
 - (NSArray<NSString *> *)toolbarAllowedItemIdentifiers:(NSToolbar *)toolbar
@@ -182,16 +179,7 @@ static CGFloat itemWidth = 37;
 
 - (NSToolbarItem *)toolbar:(NSToolbar *)toolbar itemForItemIdentifier:(NSString *)itemIdentifier willBeInsertedIntoToolbar:(BOOL)flag
 {
-    NSToolbarItem *item;
-    
-    for (NSToolbarItem *currentItem in self->toolbarItems) {
-        if ([currentItem.itemIdentifier isEqualToString:itemIdentifier]) {
-            item = currentItem;
-            break;
-        }
-    }
-    
-    return item;
+    return self->toolbarItemIdentifierObjectDictionary[itemIdentifier];
 }
 
 
