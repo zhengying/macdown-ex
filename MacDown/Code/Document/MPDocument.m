@@ -192,6 +192,11 @@ typedef NS_ENUM(NSUInteger, MPWordCountType) {
 @property (weak) IBOutlet WebView *preview;
 @property (strong) NSOutlineView *sidebarOutlineView;
 @property (strong) NSArray *sidebarItems;
+@property (strong) NSOutlineView *markdownOutlineView;
+@property (strong) NSArray *markdownOutlineItems;
+@property (strong) NSSplitView *markdownOutlineContainerSplitView;
+@property (strong) NSScrollView *markdownOutlineScrollView;
+@property CGFloat markdownOutlinePreviousWidth;
 @property (weak) IBOutlet NSPopUpButton *wordCountWidget;
 @property (strong) IBOutlet MPToolbarController *toolbarController;
 @property (copy, nonatomic) NSString *autosaveName;
@@ -294,6 +299,13 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
     return (self.editorContainer.frame.size.width != 0.0);
 }
 
+- (BOOL)markdownOutlineVisible
+{
+    if (!self.markdownOutlineScrollView)
+        return NO;
+    return (self.markdownOutlineScrollView.frame.size.width > 1.0);
+}
+
 - (BOOL)needsHtml
 {
     if (self.preferences.markdownManualRender)
@@ -363,6 +375,10 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
 {
     [super windowControllerDidLoadNib:controller];
 
+    self.markdownOutlineContainerSplitView = nil;
+    self.markdownOutlineScrollView = nil;
+    self.markdownOutlinePreviousWidth = 0.0;
+
     if (self.isDirectory) {
         NSView *contentView = controller.window.contentView;
         NSView *oldSplitView = self.splitView;
@@ -372,7 +388,11 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
         [outerSplitView setDividerStyle:NSSplitViewDividerStyleThin];
         [outerSplitView setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
         
-        NSScrollView *scrollView = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, 200, contentView.bounds.size.height)];
+        CGFloat sidebarWidth = 200.0;
+        CGFloat outlineWidth = 220.0;
+        self.markdownOutlinePreviousWidth = outlineWidth;
+
+        NSScrollView *scrollView = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, sidebarWidth, contentView.bounds.size.height)];
         [scrollView setHasVerticalScroller:YES];
         [scrollView setAutoresizingMask:NSViewHeightSizable];
         
@@ -389,14 +409,92 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
         
         self.sidebarOutlineView = outlineView;
         
+        NSScrollView *markdownOutlineScrollView = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, outlineWidth, contentView.bounds.size.height)];
+        [markdownOutlineScrollView setHasVerticalScroller:YES];
+        [markdownOutlineScrollView setAutoresizingMask:NSViewHeightSizable];
+
+        NSOutlineView *markdownOutlineView = [[NSOutlineView alloc] initWithFrame:markdownOutlineScrollView.bounds];
+        NSTableColumn *markdownColumn = [[NSTableColumn alloc] initWithIdentifier:@"MarkdownOutlineColumn"];
+        [markdownColumn setWidth:1000];
+        [markdownOutlineView addTableColumn:markdownColumn];
+        [markdownOutlineView setOutlineTableColumn:markdownColumn];
+        [markdownOutlineView setHeaderView:nil];
+        [markdownOutlineView setDataSource:self];
+        [markdownOutlineView setDelegate:self];
+        [markdownOutlineView reloadData];
+        [markdownOutlineView expandItem:nil expandChildren:YES];
+        [markdownOutlineScrollView setDocumentView:markdownOutlineView];
+
+        self.markdownOutlineView = markdownOutlineView;
+        self.markdownOutlineScrollView = markdownOutlineScrollView;
+
         [oldSplitView removeFromSuperview];
         [outerSplitView addSubview:scrollView];
         [outerSplitView addSubview:oldSplitView];
+        [outerSplitView addSubview:markdownOutlineScrollView];
         [controller.window setContentView:outerSplitView];
         
-        [oldSplitView setFrameSize:NSMakeSize(contentView.bounds.size.width - 200, contentView.bounds.size.height)];
-        [scrollView setFrameSize:NSMakeSize(200, contentView.bounds.size.height)];
+        CGFloat totalWidth = contentView.bounds.size.width;
+        CGFloat editorWidth = totalWidth - sidebarWidth - outlineWidth;
+        if (editorWidth < 200.0)
+            editorWidth = 200.0;
+
+        [oldSplitView setFrameSize:NSMakeSize(editorWidth, contentView.bounds.size.height)];
+        [scrollView setFrameSize:NSMakeSize(sidebarWidth, contentView.bounds.size.height)];
+        [markdownOutlineScrollView setFrameSize:NSMakeSize(outlineWidth, contentView.bounds.size.height)];
         [outerSplitView adjustSubviews];
+
+        [outerSplitView setPosition:sidebarWidth ofDividerAtIndex:0];
+        CGFloat outlineDividerPosition = outerSplitView.bounds.size.width - outlineWidth;
+        if (outlineDividerPosition < sidebarWidth + 200.0)
+            outlineDividerPosition = sidebarWidth + 200.0;
+        [outerSplitView setPosition:outlineDividerPosition ofDividerAtIndex:1];
+
+        self.markdownOutlineContainerSplitView = outerSplitView;
+    }
+    else
+    {
+        NSView *contentView = controller.window.contentView;
+        NSView *oldSplitView = self.splitView;
+
+        NSSplitView *outerSplitView = [[NSSplitView alloc] initWithFrame:contentView.bounds];
+        [outerSplitView setVertical:YES];
+        [outerSplitView setDividerStyle:NSSplitViewDividerStyleThin];
+        [outerSplitView setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+
+        CGFloat outlineWidth = 220.0;
+        self.markdownOutlinePreviousWidth = outlineWidth;
+        NSScrollView *scrollView = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, outlineWidth, contentView.bounds.size.height)];
+        [scrollView setHasVerticalScroller:YES];
+        [scrollView setAutoresizingMask:NSViewHeightSizable];
+
+        NSOutlineView *outlineView = [[NSOutlineView alloc] initWithFrame:scrollView.bounds];
+        NSTableColumn *column = [[NSTableColumn alloc] initWithIdentifier:@"MarkdownOutlineColumn"];
+        [column setWidth:1000];
+        [outlineView addTableColumn:column];
+        [outlineView setOutlineTableColumn:column];
+        [outlineView setHeaderView:nil];
+        [outlineView setDataSource:self];
+        [outlineView setDelegate:self];
+        [outlineView reloadData];
+        [outlineView expandItem:nil expandChildren:YES];
+        [scrollView setDocumentView:outlineView];
+
+        self.markdownOutlineView = outlineView;
+        self.markdownOutlineScrollView = scrollView;
+
+        [oldSplitView removeFromSuperview];
+        oldSplitView.translatesAutoresizingMaskIntoConstraints = YES;
+        oldSplitView.autoresizingMask = (NSViewWidthSizable | NSViewHeightSizable);
+        [outerSplitView addSubview:oldSplitView];
+        [outerSplitView addSubview:scrollView];
+        [controller.window setContentView:outerSplitView];
+
+        [oldSplitView setFrameSize:NSMakeSize(contentView.bounds.size.width - outlineWidth, contentView.bounds.size.height)];
+        [scrollView setFrameSize:NSMakeSize(outlineWidth, contentView.bounds.size.height)];
+        [outerSplitView adjustSubviews];
+
+        self.markdownOutlineContainerSplitView = outerSplitView;
     }
 
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
@@ -415,6 +513,11 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
         rectString = MPRectStringForAutosaveName(kMPDefaultAutosaveName);
     if (rectString)
         [controller.window setFrameFromString:rectString];
+
+    [self applyMarkdownOutlineDividerPositionIfNeeded];
+    [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+        [self applyMarkdownOutlineDividerPositionIfNeeded];
+    }];
 
     self.highlighter =
         [[HGMarkdownHighlighter alloc] initWithTextView:self.editor
@@ -508,7 +611,164 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
         self.loadedString = nil;
         [self.renderer parseAndRenderNow];
         [self.highlighter parseAndHighlightNow];
+        [self updateMarkdownOutline];
     }
+}
+
+- (void)updateMarkdownOutline
+{
+    if (!self.markdownOutlineView)
+        return;
+    if (!self.editor)
+        return;
+
+    self.markdownOutlineItems = [self markdownOutlineItemsForMarkdown:self.editor.string ?: @""];
+    [self.markdownOutlineView reloadData];
+    [self.markdownOutlineView expandItem:nil expandChildren:YES];
+}
+
+static BOOL MPIsSetextUnderline(NSString *trimmedLine, NSUInteger *levelOut)
+{
+    if (trimmedLine.length < 3)
+        return NO;
+    unichar c = [trimmedLine characterAtIndex:0];
+    if (c != '=' && c != '-')
+        return NO;
+    for (NSUInteger i = 1; i < trimmedLine.length; i++)
+    {
+        if ([trimmedLine characterAtIndex:i] != c)
+            return NO;
+    }
+    if (levelOut)
+        *levelOut = (c == '=') ? 1 : 2;
+    return YES;
+}
+
+- (NSArray *)markdownOutlineItemsForMarkdown:(NSString *)markdown
+{
+    NSMutableArray *roots = [NSMutableArray array];
+    NSMutableArray<NSMutableDictionary *> *stack = [NSMutableArray array];
+    NSCharacterSet *whitespace = [NSCharacterSet whitespaceCharacterSet];
+
+    __block BOOL inFence = NO;
+    __block NSString *previousLine = nil;
+    __block NSRange previousRange = NSMakeRange(NSNotFound, 0);
+    __block BOOL previousLineWasHeading = NO;
+
+    void (^addHeading)(NSString *, NSUInteger, NSUInteger) = ^(NSString *title, NSUInteger level, NSUInteger location) {
+        if (!title.length || level < 1 || level > 6)
+            return;
+
+        NSMutableDictionary *item = [NSMutableDictionary dictionary];
+        item[@"title"] = title;
+        item[@"level"] = @(level);
+        item[@"location"] = @(location);
+        item[@"children"] = [NSMutableArray array];
+
+        while (stack.count)
+        {
+            NSUInteger parentLevel = [stack.lastObject[@"level"] unsignedIntegerValue];
+            if (level > parentLevel)
+                break;
+            [stack removeLastObject];
+        }
+
+        if (!stack.count)
+        {
+            [roots addObject:item];
+        }
+        else
+        {
+            NSMutableArray *children = stack.lastObject[@"children"];
+            [children addObject:item];
+        }
+
+        [stack addObject:item];
+    };
+
+    [markdown enumerateSubstringsInRange:NSMakeRange(0, markdown.length)
+                                options:NSStringEnumerationByLines
+                             usingBlock:^(NSString *line, NSRange substringRange, NSRange enclosingRange, BOOL *stop) {
+        NSString *trimmed = [line stringByTrimmingCharactersInSet:whitespace];
+        BOOL isFenceDelimiter = [trimmed hasPrefix:@"```"] || [trimmed hasPrefix:@"~~~"];
+        if (isFenceDelimiter)
+        {
+            inFence = !inFence;
+            previousLine = nil;
+            previousRange = NSMakeRange(NSNotFound, 0);
+            previousLineWasHeading = NO;
+            return;
+        }
+
+        if (!inFence && previousLine && !previousLineWasHeading)
+        {
+            NSUInteger setextLevel = 0;
+            if (MPIsSetextUnderline(trimmed, &setextLevel))
+            {
+                NSString *prevTrimmed = [previousLine stringByTrimmingCharactersInSet:whitespace];
+                if (prevTrimmed.length && previousRange.location != NSNotFound)
+                    addHeading(prevTrimmed, setextLevel, previousRange.location);
+                previousLine = nil;
+                previousRange = NSMakeRange(NSNotFound, 0);
+                previousLineWasHeading = NO;
+                return;
+            }
+        }
+
+        BOOL isHeading = NO;
+        if (!inFence)
+        {
+            NSUInteger i = 0;
+            NSUInteger maxLeading = MIN((NSUInteger)3, line.length);
+            while (i < maxLeading)
+            {
+                unichar c = [line characterAtIndex:i];
+                if (c != ' ' && c != '\t')
+                    break;
+                i++;
+            }
+
+            NSUInteger hashCount = 0;
+            while (i < line.length && [line characterAtIndex:i] == '#')
+            {
+                hashCount++;
+                i++;
+            }
+
+            if (hashCount >= 1 && hashCount <= 6)
+            {
+                BOOL valid = (i == line.length);
+                if (!valid)
+                {
+                    unichar next = [line characterAtIndex:i];
+                    valid = (next == ' ' || next == '\t');
+                }
+
+                if (valid)
+                {
+                    NSString *title = [[line substringFromIndex:i] stringByTrimmingCharactersInSet:whitespace];
+                    if (title.length)
+                    {
+                        NSUInteger end = title.length;
+                        while (end > 0 && [title characterAtIndex:end - 1] == '#')
+                            end--;
+                        title = [[title substringToIndex:end] stringByTrimmingCharactersInSet:whitespace];
+                    }
+                    if (title.length)
+                    {
+                        addHeading(title, hashCount, substringRange.location);
+                        isHeading = YES;
+                    }
+                }
+            }
+        }
+
+        previousLine = line;
+        previousRange = substringRange;
+        previousLineWasHeading = isHeading;
+    }];
+
+    return roots;
 }
 
 - (void)close
@@ -674,6 +934,8 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
 
 - (void)outlineView:(NSOutlineView *)outlineView willDisplayCell:(id)cell forTableColumn:(NSTableColumn *)tableColumn item:(id)item
 {
+    if (outlineView != self.sidebarOutlineView)
+        return;
     NSDictionary *dict = item;
     NSString *name = dict[@"name"];
     BOOL isMD = [name.pathExtension.lowercaseString isEqualToString:@"md"] || [name.pathExtension.lowercaseString isEqualToString:@"markdown"];
@@ -833,6 +1095,16 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
                           @"Toggle editor pane menu item") :
         NSLocalizedString(@"Restore Editor Pane",
                           @"Toggle editor pane menu item");
+    }
+    else if (action == @selector(toggleOutlinePane:))
+    {
+        NSMenuItem *it = (NSMenuItem *)item;
+        it.hidden = (self.markdownOutlineContainerSplitView == nil);
+        it.title = self.markdownOutlineVisible ?
+            NSLocalizedString(@"Hide Outline Pane",
+                              @"Toggle outline pane menu item") :
+            NSLocalizedString(@"Show Outline Pane",
+                              @"Toggle outline pane menu item");
     }
     return result;
 }
@@ -1276,6 +1548,8 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
 {
     if (self.needsHtml)
         [self.renderer parseAndRenderLater];
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(updateMarkdownOutline) object:nil];
+    [self performSelector:@selector(updateMarkdownOutline) withObject:nil afterDelay:0.15];
 }
 
 - (void)userDefaultsDidChange:(NSNotification *)notification
@@ -1636,6 +1910,33 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
     [self toggleSplitterCollapsingEditorPane:YES];
 }
 
+- (IBAction)toggleOutlinePane:(id)sender
+{
+    if (!self.markdownOutlineContainerSplitView)
+        return;
+    NSArray *subviews = self.markdownOutlineContainerSplitView.subviews;
+    if (subviews.count < 2)
+        return;
+    if (!self.markdownOutlineScrollView)
+        return;
+    NSInteger dividerIndex = subviews.count - 2;
+    CGFloat totalWidth = self.markdownOutlineContainerSplitView.bounds.size.width;
+    if (totalWidth <= 0.0)
+        return;
+
+    if (self.markdownOutlineScrollView.frame.size.width > 1.0)
+    {
+        self.markdownOutlinePreviousWidth = self.markdownOutlineScrollView.frame.size.width;
+        [self.markdownOutlineContainerSplitView setPosition:(totalWidth - 1.0) ofDividerAtIndex:dividerIndex];
+    }
+    else
+    {
+        if (self.markdownOutlinePreviousWidth <= 0.0)
+            self.markdownOutlinePreviousWidth = 220.0;
+        [self applyMarkdownOutlineDividerPositionIfNeeded];
+    }
+}
+
 - (IBAction)render:(id)sender
 {
     [self.renderer parseAndRenderLater];
@@ -1643,6 +1944,38 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
 
 
 #pragma mark - Private
+
+- (void)applyMarkdownOutlineDividerPositionIfNeeded
+{
+    if (!self.markdownOutlineContainerSplitView)
+        return;
+    NSArray *subviews = self.markdownOutlineContainerSplitView.subviews;
+    if (subviews.count < 2)
+        return;
+
+    CGFloat totalWidth = self.markdownOutlineContainerSplitView.bounds.size.width;
+    if (totalWidth <= 0.0)
+        return;
+
+    CGFloat outlineWidth = self.markdownOutlinePreviousWidth;
+    if (outlineWidth <= 0.0)
+        outlineWidth = 220.0;
+
+    CGFloat position = totalWidth - outlineWidth;
+    CGFloat minPosition = 200.0;
+    if (subviews.count >= 3)
+    {
+        CGFloat leftWidth = ((NSView *)subviews[0]).frame.size.width;
+        minPosition = leftWidth + 200.0;
+    }
+    if (position < minPosition)
+        position = minPosition;
+    if (position > totalWidth - 100.0)
+        position = totalWidth - 100.0;
+
+    NSInteger dividerIndex = subviews.count - 2;
+    [self.markdownOutlineContainerSplitView setPosition:position ofDividerAtIndex:dividerIndex];
+}
 
 - (void)toggleSplitterCollapsingEditorPane:(BOOL)forEditorPane
 {
@@ -2212,24 +2545,44 @@ current file somewhere to enable this feature.", \
 
 - (NSInteger)outlineView:(NSOutlineView *)outlineView numberOfChildrenOfItem:(id)item
 {
-    if (item == nil) {
-        return self.sidebarItems.count;
+    if (outlineView == self.markdownOutlineView)
+    {
+        if (item == nil)
+            return self.markdownOutlineItems.count;
+        NSDictionary *dict = item;
+        return [dict[@"children"] count];
     }
+
+    if (item == nil)
+        return self.sidebarItems.count;
     NSDictionary *dict = item;
     return [dict[@"children"] count];
 }
 
 - (BOOL)outlineView:(NSOutlineView *)outlineView isItemExpandable:(id)item
 {
+    if (outlineView == self.markdownOutlineView)
+    {
+        NSDictionary *dict = item;
+        return ([dict[@"children"] count] > 0);
+    }
+
     NSDictionary *dict = item;
     return [dict[@"isDirectory"] boolValue];
 }
 
 - (id)outlineView:(NSOutlineView *)outlineView child:(NSInteger)index ofItem:(id)item
 {
-    if (item == nil) {
-        return self.sidebarItems[index];
+    if (outlineView == self.markdownOutlineView)
+    {
+        if (item == nil)
+            return self.markdownOutlineItems[index];
+        NSDictionary *dict = item;
+        return dict[@"children"][index];
     }
+
+    if (item == nil)
+        return self.sidebarItems[index];
     NSDictionary *dict = item;
     return dict[@"children"][index];
 }
@@ -2237,17 +2590,42 @@ current file somewhere to enable this feature.", \
 - (id)outlineView:(NSOutlineView *)outlineView objectValueForTableColumn:(NSTableColumn *)tableColumn byItem:(id)item
 {
     NSDictionary *dict = item;
+    if (outlineView == self.markdownOutlineView)
+        return dict[@"title"];
     return dict[@"name"];
 }
 
 - (void)outlineViewSelectionDidChange:(NSNotification *)notification
 {
+    NSOutlineView *outlineView = notification.object;
+    if (outlineView == self.markdownOutlineView)
+    {
+        NSInteger row = [self.markdownOutlineView selectedRow];
+        if (row < 0)
+            return;
+        NSDictionary *item = [self.markdownOutlineView itemAtRow:row];
+        NSNumber *locationNumber = item[@"location"];
+        if (!locationNumber)
+            return;
+        NSUInteger location = locationNumber.unsignedIntegerValue;
+        if (location > self.editor.string.length)
+            return;
+
+        NSRange lineRange = [self.editor.string lineRangeForRange:NSMakeRange(location, 0)];
+        [self.editor setSelectedRange:NSMakeRange(lineRange.location, 0)];
+        [self.editor scrollRangeToVisible:lineRange];
+        [self.windowForSheet makeFirstResponder:self.editor];
+        return;
+    }
+
     NSInteger row = [self.sidebarOutlineView selectedRow];
-    if (row < 0) return;
-    
+    if (row < 0)
+        return;
+
     NSDictionary *item = [self.sidebarOutlineView itemAtRow:row];
-    if ([item[@"isDirectory"] boolValue]) return;
-    
+    if ([item[@"isDirectory"] boolValue])
+        return;
+
     NSURL *url = item[@"url"];
     [self loadFile:url];
 }
@@ -2265,6 +2643,7 @@ current file somewhere to enable this feature.", \
         
         [self.renderer parseAndRenderNow];
         [self.highlighter parseAndHighlightNow];
+        [self updateMarkdownOutline];
     }
 }
 

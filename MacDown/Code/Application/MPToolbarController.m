@@ -50,6 +50,7 @@ static CGFloat itemWidth = 37;
     // Set up layout drop down alternatives. title will be set in validateUserInterfaceItem:
     NSMenuItem *toggleEditorMenuItem = [[NSMenuItem alloc] initWithTitle:@"" action:@selector(toggleEditorPane:) keyEquivalent:@"e"];
     NSMenuItem *togglePreviewMenuItem = [[NSMenuItem alloc] initWithTitle:@"" action:@selector(togglePreviewPane:) keyEquivalent:@"p"];
+    NSMenuItem *toggleOutlineMenuItem = [[NSMenuItem alloc] initWithTitle:@"" action:@selector(toggleOutlinePane:) keyEquivalent:@"o"];
     
     // Set up all available toolbar items
     self->toolbarItems = @[
@@ -83,9 +84,10 @@ static CGFloat itemWidth = 37;
         [self toolbarItemWithIdentifier:@"comment" label:NSLocalizedString(@"Comment", @"Comment toolbar button") icon:@"ToolbarIconComment" action:@selector(toggleComment:)],
         [self toolbarItemWithIdentifier:@"highlight" label:NSLocalizedString(@"Highlight", @"Highlight toolbar button") icon:@"ToolbarIconHighlight" action:@selector(toggleHighlight:)],
         [self toolbarItemWithIdentifier:@"strikethrough" label:NSLocalizedString(@"Strikethrough", @"Strikethrough toolbar button") icon:@"ToolbarIconStrikethrough" action:@selector(toggleStrikethrough:)],
+        [self toolbarItemWithIdentifier:@"toggle-outline" label:NSLocalizedString(@"Outline", @"Toggle outline toolbar button") icon:@"ToolbarIconHeading1" action:@selector(toggleOutlinePane:)],
         [self toolbarItemDropDownWithIdentifier:@"layout" label:NSLocalizedString(@"Layout", @"Layout toolbar button") icon:@"ToolbarIconEditorAndPreview" menuItems:
             @[
-              toggleEditorMenuItem, togglePreviewMenuItem
+              toggleEditorMenuItem, togglePreviewMenuItem, toggleOutlineMenuItem
             ]
         ]
     ];
