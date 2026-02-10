@@ -7,7 +7,7 @@
 //
 
 #import "MPPreferencesViewController.h"
-#import <MASPreferences/MASPreferencesViewController.h>
+#import "MASPreferencesViewController.h"
 
 extern NSString * const MPDidRequestEditorSetupNotificationKeyName;
 

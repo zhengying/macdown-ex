@@ -8,7 +8,7 @@
 //
 
 #import "YAMLSerialization.h"
-#import <M13OrderedDictionary/M13OrderedDictionary.h>
+#import "M13OrderedDictionary.h"
 
 NSString *const YAMLErrorDomain = @"com.github.mirek.yaml";
 

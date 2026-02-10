@@ -6,7 +6,7 @@
 //  Copyright (c) 2014 Tzu-ping Chung . All rights reserved.
 //
 
-#import <PAPreferences/PAPreferences.h>
+#import "PAPreferences.h"
 
 
 extern NSString * const MPDidDetectFreshInstallationNotification;

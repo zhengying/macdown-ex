@@ -7,7 +7,7 @@
 //
 
 #import "MPPreferencesViewController.h"
-#import <MASPreferences/MASPreferencesViewController.h>
+#import "MASPreferencesViewController.h"
 
 @interface MPHtmlPreferencesViewController : MPPreferencesViewController
     <MASPreferencesViewController>

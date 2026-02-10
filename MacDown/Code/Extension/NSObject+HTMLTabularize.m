@@ -7,8 +7,8 @@
 //
 
 #import "NSObject+HTMLTabularize.h"
-#import <HBHandlebars/HBHandlebars.h>
-#import <M13OrderedDictionary/M13OrderedDictionary.h>
+#import "HBHandlebars.h"
+#import "M13OrderedDictionary.h"
 
 
 @implementation NSObject (HTMLTabularize)

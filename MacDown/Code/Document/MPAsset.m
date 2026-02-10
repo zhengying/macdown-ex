@@ -7,7 +7,7 @@
 //
 
 #import "MPAsset.h"
-#import <HBHandlebars/HBHandlebars.h>
+#import "HBHandlebars.h"
 #import "MPUtilities.h"
 
 

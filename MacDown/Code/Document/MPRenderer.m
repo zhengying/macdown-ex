@@ -8,9 +8,9 @@
 
 #import "MPRenderer.h"
 #import <limits.h>
-#import <hoedown/html.h>
-#import <hoedown/document.h>
-#import <HBHandlebars/HBHandlebars.h>
+#import "html.h"
+#import "document.h"
+#import "HBHandlebars.h"
 #import "hoedown_html_patch.h"
 #import "NSJSONSerialization+File.h"
 #import "NSObject+HTMLTabularize.h"

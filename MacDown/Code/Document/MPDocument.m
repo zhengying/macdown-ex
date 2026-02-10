@@ -8,8 +8,9 @@
 
 #import "MPDocument.h"
 #import <WebKit/WebKit.h>
-#import <JJPluralForm/JJPluralForm.h>
-#import <hoedown/html.h>
+#import "JJPluralForm.h"
+#import "html.h"
+#import "document.h"
 #import "hoedown_html_patch.h"
 #import "HGMarkdownHighlighter.h"
 #import "MPUtilities.h"

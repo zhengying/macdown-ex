@@ -7,7 +7,7 @@
 //
 
 #import "MPMainController.h"
-#import <MASPreferences/MASPreferencesWindowController.h>
+#import "MASPreferencesWindowController.h"
 #import <Sparkle/SUUpdater.h>
 #import "MPGlobals.h"
 #import "MPUtilities.h"
