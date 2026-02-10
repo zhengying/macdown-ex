@@ -15,15 +15,11 @@ if [[ "${BUILD_PROXY:-}" == "1" ]]; then
   export ALL_PROXY="${ALL_PROXY:-$all_proxy}"
 fi
 
-# 1. Initialize and update submodules
-echo "📦 Updating git submodules..."
-git submodule update --init --recursive
-
-# 2. Build external dependency (peg-markdown-highlight)
+# 1. Build external dependency (peg-markdown-highlight)
 echo "🔨 Building peg-markdown-highlight..."
 make -C Dependency/peg-markdown-highlight
 
-# 3. Build the project using xcodebuild
+# 2. Build the project using xcodebuild
 echo "🏗️  Building MacDown.xcodeproj..."
 # Using xcodebuild to build the project
 # -project: The project file
