@@ -138,26 +138,10 @@ static CGFloat itemWidth = 37;
 - (NSArray<NSView *> *)editorToolbarItemViews
 {
     NSMutableArray<NSView *> *views = [NSMutableArray array];
-    NSArray<NSString *> *identifiers = [self toolbarItemIdentifiersFromItemsArray:self->toolbarItems];
+    NSArray<NSToolbarItem *> *items = [self editorToolbarItems];
 
-    for (NSString *identifier in identifiers)
+    for (NSToolbarItem *item in items)
     {
-        if ([identifier isEqualToString:NSToolbarFlexibleSpaceItemIdentifier])
-            continue;
-        if ([identifier isEqualToString:@"comment"]
-            || [identifier isEqualToString:@"highlight"]
-            || [identifier isEqualToString:@"strikethrough"])
-            continue;
-        if ([identifier isEqualToString:NSToolbarSpaceItemIdentifier])
-        {
-            NSView *spacer = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 8.0, 1.0)];
-            [views addObject:spacer];
-            continue;
-        }
-
-        NSToolbarItem *item = self->toolbarItemIdentifierObjectDictionary[identifier];
-        if (!item)
-            continue;
         if (!item.view)
             continue;
 
@@ -165,6 +149,24 @@ static CGFloat itemWidth = 37;
     }
 
     return [views copy];
+}
+
+- (NSArray<NSToolbarItem *> *)editorToolbarItems
+{
+    NSMutableArray<NSToolbarItem *> *items = [NSMutableArray array];
+
+    for (NSToolbarItem *item in self->toolbarItems)
+    {
+        NSString *identifier = item.itemIdentifier;
+        if ([identifier isEqualToString:@"comment"]
+            || [identifier isEqualToString:@"highlight"]
+            || [identifier isEqualToString:@"strikethrough"])
+            continue;
+
+        [items addObject:item];
+    }
+
+    return [items copy];
 }
 
 - (NSArray<NSString *> *)toolbarAllowedItemIdentifiers:(NSToolbar *)toolbar

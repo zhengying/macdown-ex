@@ -14,6 +14,7 @@
 
 @property (weak) IBOutlet MPDocument *document;
 
+- (NSArray<NSToolbarItem *> *)editorToolbarItems;
 - (NSArray<NSView *> *)editorToolbarItemViews;
 
 @end

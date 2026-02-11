@@ -207,6 +207,11 @@ typedef NS_ENUM(NSUInteger, MPWordCountType) {
 @property (strong) IBOutlet MPToolbarController *toolbarController;
 @property (strong) NSView *editorToolbarBar;
 @property (strong) NSStackView *editorToolbarStackView;
+@property (strong) NSArray<NSToolbarItem *> *editorToolbarItems;
+@property (strong) NSButton *editorToolbarOverflowButton;
+@property (strong) NSMenu *editorToolbarOverflowMenu;
+@property (strong) NSLayoutConstraint *editorToolbarStackTrailingToBarConstraint;
+@property (strong) NSLayoutConstraint *editorToolbarStackTrailingToOverflowConstraint;
 @property (copy, nonatomic) NSString *autosaveName;
 @property (strong) HGMarkdownHighlighter *highlighter;
 @property (strong) MPRenderer *renderer;
@@ -2269,18 +2274,37 @@ static BOOL MPIsSetextUnderline(NSString *trimmedLine, NSUInteger *levelOut)
     stack.translatesAutoresizingMaskIntoConstraints = NO;
     stack.orientation = NSUserInterfaceLayoutOrientationHorizontal;
     stack.alignment = NSLayoutAttributeCenterY;
-    stack.distribution = NSStackViewDistributionFillProportionally;
+    stack.distribution = NSStackViewDistributionFill;
     stack.spacing = 4.0;
 
-    NSArray<NSView *> *itemViews = [self.toolbarController editorToolbarItemViews];
-    for (NSView *view in itemViews)
+    self.editorToolbarItems = [self.toolbarController editorToolbarItems];
+    for (NSToolbarItem *item in self.editorToolbarItems)
     {
+        NSView *view = item.view;
+        if (!view)
+            continue;
         if (view.superview)
             [view removeFromSuperview];
         [stack addArrangedSubview:view];
     }
 
+    self.editorToolbarOverflowMenu = [[NSMenu alloc] initWithTitle:@""];
+    self.editorToolbarOverflowButton = [[NSButton alloc] initWithFrame:NSMakeRect(0.0, 0.0, 38.0, 27.0)];
+    self.editorToolbarOverflowButton.translatesAutoresizingMaskIntoConstraints = NO;
+    self.editorToolbarOverflowButton.bezelStyle = NSBezelStyleTexturedRounded;
+    self.editorToolbarOverflowButton.focusRingType = NSFocusRingTypeDefault;
+    self.editorToolbarOverflowButton.target = self;
+    self.editorToolbarOverflowButton.action = @selector(showEditorToolbarOverflowMenu:);
+    self.editorToolbarOverflowButton.toolTip = NSLocalizedString(@"More", @"Overflow toolbar button");
+    NSImage *overflowImage = [NSImage imageNamed:@"NSActionTemplate"];
+    [overflowImage setTemplate:YES];
+    [overflowImage setSize:NSMakeSize(16.0, 16.0)];
+    self.editorToolbarOverflowButton.image = overflowImage;
+    self.editorToolbarOverflowButton.imageScaling = NSImageScaleProportionallyDown;
+    self.editorToolbarOverflowButton.hidden = YES;
+
     [bar addSubview:stack];
+    [bar addSubview:self.editorToolbarOverflowButton];
     [container addSubview:bar positioned:NSWindowAbove relativeTo:editorScrollView];
 
     self.editorToolbarBar = bar;
@@ -2289,6 +2313,12 @@ static BOOL MPIsSetextUnderline(NSString *trimmedLine, NSUInteger *levelOut)
     NSLayoutConstraint *barHeight = [bar.heightAnchor constraintEqualToConstant:32.0];
     barHeight.priority = NSLayoutPriorityRequired;
 
+    self.editorToolbarStackTrailingToBarConstraint =
+        [stack.trailingAnchor constraintLessThanOrEqualToAnchor:bar.trailingAnchor constant:-6.0];
+    self.editorToolbarStackTrailingToOverflowConstraint =
+        [stack.trailingAnchor constraintLessThanOrEqualToAnchor:self.editorToolbarOverflowButton.leadingAnchor constant:-6.0];
+    self.editorToolbarStackTrailingToOverflowConstraint.active = NO;
+
     [NSLayoutConstraint activateConstraints:@[
         [bar.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
         [bar.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
@@ -2296,11 +2326,15 @@ static BOOL MPIsSetextUnderline(NSString *trimmedLine, NSUInteger *levelOut)
         barHeight,
 
         [stack.leadingAnchor constraintEqualToAnchor:bar.leadingAnchor constant:6.0],
-        [stack.trailingAnchor constraintLessThanOrEqualToAnchor:bar.trailingAnchor constant:-6.0],
-        [stack.centerYAnchor constraintEqualToAnchor:bar.centerYAnchor]
+        self.editorToolbarStackTrailingToBarConstraint,
+        [stack.centerYAnchor constraintEqualToAnchor:bar.centerYAnchor],
+
+        [self.editorToolbarOverflowButton.trailingAnchor constraintEqualToAnchor:bar.trailingAnchor constant:-6.0],
+        [self.editorToolbarOverflowButton.centerYAnchor constraintEqualToAnchor:bar.centerYAnchor]
     ]];
 
     NSMutableArray<NSLayoutConstraint *> *constraintsToRemove = [NSMutableArray array];
+
     for (NSLayoutConstraint *constraint in container.constraints)
     {
         BOOL matchesScrollAndContainer =
@@ -2323,6 +2357,162 @@ static BOOL MPIsSetextUnderline(NSString *trimmedLine, NSUInteger *levelOut)
     [NSLayoutConstraint activateConstraints:@[
         [editorScrollView.topAnchor constraintEqualToAnchor:bar.bottomAnchor]
     ]];
+
+    bar.postsFrameChangedNotifications = YES;
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(editorToolbarBarFrameDidChange:)
+                                                 name:NSViewFrameDidChangeNotification
+                                               object:bar];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self updateEditorToolbarOverflow];
+    });
+}
+
+- (void)editorToolbarBarFrameDidChange:(NSNotification *)notification
+{
+    [self updateEditorToolbarOverflow];
+}
+
+- (void)updateEditorToolbarOverflow
+{
+    if (!self.editorToolbarBar || !self.editorToolbarStackView)
+        return;
+    if (!self.editorToolbarOverflowButton || !self.editorToolbarOverflowMenu)
+        return;
+    if (!self.editorToolbarItems.count)
+        return;
+
+    [self.editorToolbarBar layoutSubtreeIfNeeded];
+
+    CGFloat barWidth = self.editorToolbarBar.bounds.size.width;
+    if (barWidth <= 0.0)
+        return;
+
+    [self.editorToolbarOverflowMenu removeAllItems];
+
+    NSMutableArray<NSToolbarItem *> *itemsWithViews = [NSMutableArray array];
+    NSMutableArray<NSView *> *itemViews = [NSMutableArray array];
+    for (NSToolbarItem *item in self.editorToolbarItems)
+    {
+        if (!item.view)
+            continue;
+        [itemsWithViews addObject:item];
+        [itemViews addObject:item.view];
+    }
+
+    for (NSView *view in itemViews)
+        view.hidden = NO;
+    self.editorToolbarOverflowButton.hidden = YES;
+    self.editorToolbarStackTrailingToOverflowConstraint.active = NO;
+    self.editorToolbarStackTrailingToBarConstraint.active = YES;
+
+    CGFloat padding = 6.0;
+    CGFloat gapToOverflow = 6.0;
+    CGFloat overflowWidth = self.editorToolbarOverflowButton.fittingSize.width;
+    if (overflowWidth <= 0.0)
+        overflowWidth = self.editorToolbarOverflowButton.intrinsicContentSize.width;
+    if (overflowWidth <= 0.0)
+        overflowWidth = self.editorToolbarOverflowButton.frame.size.width;
+
+    CGFloat availableWithoutOverflow = barWidth - 2.0 * padding;
+    CGFloat availableWithOverflow = barWidth - 2.0 * padding - overflowWidth - gapToOverflow;
+    if (availableWithoutOverflow <= 0.0 || availableWithOverflow <= 0.0)
+        return;
+
+    CGFloat spacing = self.editorToolbarStackView.spacing;
+    CGFloat totalWidth = 0.0;
+    for (NSView *view in itemViews)
+    {
+        CGFloat w = view.frame.size.width;
+        if (w <= 0.0)
+            w = view.fittingSize.width;
+        if (w <= 0.0)
+            w = view.intrinsicContentSize.width;
+        totalWidth += w;
+    }
+    if (itemViews.count > 1)
+        totalWidth += spacing * (itemViews.count - 1);
+
+    if (totalWidth <= availableWithoutOverflow)
+        return;
+
+    NSInteger visibleCount = itemViews.count;
+    while (visibleCount > 0)
+    {
+        CGFloat currentWidth = 0.0;
+        for (NSInteger i = 0; i < visibleCount; i++)
+        {
+            NSView *view = itemViews[i];
+            CGFloat w = view.frame.size.width;
+            if (w <= 0.0)
+                w = view.fittingSize.width;
+            if (w <= 0.0)
+                w = view.intrinsicContentSize.width;
+            currentWidth += w;
+        }
+        if (visibleCount > 1)
+            currentWidth += spacing * (visibleCount - 1);
+
+        if (currentWidth <= availableWithOverflow)
+            break;
+
+        visibleCount--;
+    }
+
+    if (visibleCount >= itemViews.count)
+        return;
+
+    self.editorToolbarOverflowButton.hidden = NO;
+    self.editorToolbarStackTrailingToBarConstraint.active = NO;
+    self.editorToolbarStackTrailingToOverflowConstraint.active = YES;
+
+    for (NSInteger i = visibleCount; i < itemViews.count; i++)
+        itemViews[i].hidden = YES;
+
+    BOOL needsSeparator = NO;
+    for (NSInteger i = visibleCount; i < itemsWithViews.count; i++)
+    {
+        NSToolbarItem *item = itemsWithViews[i];
+        if ([item isKindOfClass:[NSToolbarItemGroup class]])
+        {
+            NSToolbarItemGroup *group = (NSToolbarItemGroup *)item;
+            if (needsSeparator && self.editorToolbarOverflowMenu.numberOfItems)
+                [self.editorToolbarOverflowMenu addItem:[NSMenuItem separatorItem]];
+            for (NSToolbarItem *subItem in group.subitems)
+            {
+                if (!subItem.action || !subItem.label.length)
+                    continue;
+                NSMenuItem *menuItem = [[NSMenuItem alloc] initWithTitle:subItem.label action:subItem.action keyEquivalent:@""];
+                menuItem.target = self;
+                menuItem.image = subItem.image;
+                [self.editorToolbarOverflowMenu addItem:menuItem];
+            }
+            needsSeparator = YES;
+            continue;
+        }
+
+        if (!item.action || !item.label.length)
+            continue;
+        if (needsSeparator && self.editorToolbarOverflowMenu.numberOfItems)
+            [self.editorToolbarOverflowMenu addItem:[NSMenuItem separatorItem]];
+        NSMenuItem *menuItem = [[NSMenuItem alloc] initWithTitle:item.label action:item.action keyEquivalent:@""];
+        menuItem.target = self;
+        menuItem.image = item.image;
+        [self.editorToolbarOverflowMenu addItem:menuItem];
+        needsSeparator = YES;
+    }
+}
+
+- (IBAction)showEditorToolbarOverflowMenu:(id)sender
+{
+    if (!self.editorToolbarOverflowMenu.numberOfItems)
+        return;
+    if (![sender isKindOfClass:[NSView class]])
+        return;
+
+    NSView *view = (NSView *)sender;
+    NSPoint point = NSMakePoint(0.0, NSHeight(view.bounds));
+    [self.editorToolbarOverflowMenu popUpMenuPositioningItem:nil atLocation:point inView:view];
 }
 
 - (void)applyMarkdownOutlineDividerPositionIfNeeded
