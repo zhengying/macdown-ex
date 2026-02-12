@@ -100,13 +100,70 @@ NS_INLINE BOOL MPAreRectsEqual(NSRect r1, NSRect r2)
         
         if (directoryURLs.count) {
             NSDocumentController *controller = [NSDocumentController sharedDocumentController];
-            for (NSURL *url in directoryURLs) {
+            NSDocument *currentDocument = nil;
+            if ([self.window.windowController.document isKindOfClass:[NSDocument class]])
+                currentDocument = (NSDocument *)self.window.windowController.document;
+
+            NSURL *primaryURL = directoryURLs.firstObject;
+            NSArray<NSURL *> *extraURLs = (directoryURLs.count > 1)
+                ? [directoryURLs subarrayWithRange:NSMakeRange(1, directoryURLs.count - 1)]
+                : @[];
+
+            void (^openInNewWindow)(NSURL *) = ^(NSURL *url) {
                 [controller openDocumentWithContentsOfURL:url display:YES completionHandler:^(NSDocument *document, BOOL documentWasAlreadyOpen, NSError *error) {
                     (void)document;
                     (void)documentWasAlreadyOpen;
                     (void)error;
                 }];
+            };
+
+            if (!currentDocument) {
+                openInNewWindow(primaryURL);
+                for (NSURL *url in extraURLs)
+                    openInNewWindow(url);
+                return YES;
             }
+
+            BOOL inFolderMode = NO;
+            if ([currentDocument respondsToSelector:@selector(isDirectory)])
+                inFolderMode = [[currentDocument valueForKey:@"isDirectory"] boolValue];
+
+            if (!inFolderMode) {
+                NSError *error = nil;
+                NSString *type = currentDocument.fileType ?: @"net.daringfireball.markdown";
+                BOOL ok = [currentDocument revertToContentsOfURL:primaryURL ofType:type error:&error];
+                if (!ok)
+                    openInNewWindow(primaryURL);
+                for (NSURL *url in extraURLs)
+                    openInNewWindow(url);
+                return YES;
+            }
+
+            NSAlert *alert = [[NSAlert alloc] init];
+            alert.messageText = NSLocalizedString(@"Open Folder", @"Folder drop alert title");
+            alert.informativeText = NSLocalizedString(@"A folder is already opened in the left file tree. Do you want to replace it, or open the new folder in a new window?", @"Folder drop alert message");
+            [alert addButtonWithTitle:NSLocalizedString(@"Replace Folder", @"Folder drop alert replace button")];
+            [alert addButtonWithTitle:NSLocalizedString(@"Open in New Window", @"Folder drop alert new window button")];
+            [alert addButtonWithTitle:NSLocalizedString(@"Cancel", @"Folder drop alert cancel button")];
+
+            [alert beginSheetModalForWindow:self.window completionHandler:^(NSModalResponse returnCode) {
+                if (returnCode == NSAlertFirstButtonReturn) {
+                    NSError *error = nil;
+                    NSString *type = currentDocument.fileType ?: @"net.daringfireball.markdown";
+                    BOOL ok = [currentDocument revertToContentsOfURL:primaryURL ofType:type error:&error];
+                    if (!ok)
+                        openInNewWindow(primaryURL);
+                    for (NSURL *url in extraURLs)
+                        openInNewWindow(url);
+                    return;
+                }
+                if (returnCode == NSAlertSecondButtonReturn) {
+                    openInNewWindow(primaryURL);
+                    for (NSURL *url in extraURLs)
+                        openInNewWindow(url);
+                    return;
+                }
+            }];
             return YES;
         }
         

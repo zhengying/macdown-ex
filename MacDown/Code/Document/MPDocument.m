@@ -384,6 +384,120 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
     return @"MPDocument";
 }
 
+- (void)ensureDirectoryLayoutIfNeeded
+{
+    if (!self.isDirectory)
+        return;
+    if (self.sidebarOutlineView && self.markdownOutlineContainerSplitView.subviews.count >= 3)
+        return;
+
+    NSWindowController *controller = self.windowControllers.firstObject;
+    if (!controller.window)
+        return;
+    NSView *contentView = controller.window.contentView;
+    if (!contentView)
+        return;
+
+    NSView *oldSplitView = self.splitView;
+    if (oldSplitView.superview)
+        [oldSplitView removeFromSuperview];
+
+    NSScrollView *markdownOutlineScrollView = self.markdownOutlineScrollView;
+    if (markdownOutlineScrollView.superview)
+        [markdownOutlineScrollView removeFromSuperview];
+
+    oldSplitView.translatesAutoresizingMaskIntoConstraints = YES;
+    oldSplitView.autoresizingMask = (NSViewWidthSizable | NSViewHeightSizable);
+
+    NSSplitView *outerSplitView = [[NSSplitView alloc] initWithFrame:contentView.bounds];
+    [outerSplitView setVertical:YES];
+    [outerSplitView setDividerStyle:NSSplitViewDividerStyleThin];
+    [outerSplitView setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+
+    CGFloat sidebarWidth = 200.0;
+    CGFloat outlineWidth = self.markdownOutlinePreviousWidth > 0.0 ? self.markdownOutlinePreviousWidth : 220.0;
+    outlineWidth = MIN(kMPMarkdownOutlineMaxWidth, outlineWidth);
+    outlineWidth = MAX(kMPMarkdownOutlineMinWidth, outlineWidth);
+    self.markdownOutlinePreviousWidth = outlineWidth;
+
+    NSScrollView *sidebarScrollView = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, sidebarWidth, contentView.bounds.size.height)];
+    [sidebarScrollView setHasVerticalScroller:YES];
+    [sidebarScrollView setHasHorizontalScroller:NO];
+    [sidebarScrollView setAutoresizingMask:NSViewHeightSizable];
+
+    NSOutlineView *sidebarOutlineView = [[NSOutlineView alloc] initWithFrame:sidebarScrollView.bounds];
+    NSTableColumn *column = [[NSTableColumn alloc] initWithIdentifier:@"MainColumn"];
+    [column setResizingMask:NSTableColumnAutoresizingMask];
+    [column setWidth:sidebarScrollView.contentView.bounds.size.width];
+    [sidebarOutlineView addTableColumn:column];
+    [sidebarOutlineView setOutlineTableColumn:column];
+    [sidebarOutlineView setHeaderView:nil];
+    [sidebarOutlineView setColumnAutoresizingStyle:NSTableViewUniformColumnAutoresizingStyle];
+    if ([sidebarOutlineView respondsToSelector:@selector(setAutoresizesOutlineColumn:)])
+        [(NSOutlineView *)sidebarOutlineView setAutoresizesOutlineColumn:YES];
+    [sidebarOutlineView setDataSource:self];
+    [sidebarOutlineView setDelegate:self];
+    [sidebarOutlineView reloadData];
+    [sidebarScrollView setDocumentView:sidebarOutlineView];
+    self.sidebarOutlineView = sidebarOutlineView;
+
+    if (!markdownOutlineScrollView)
+    {
+        NSScrollView *newScrollView = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, outlineWidth, contentView.bounds.size.height)];
+        [newScrollView setHasVerticalScroller:YES];
+        [newScrollView setHasHorizontalScroller:NO];
+        [newScrollView setAutoresizingMask:NSViewHeightSizable];
+
+        NSOutlineView *outlineView = [[NSOutlineView alloc] initWithFrame:newScrollView.bounds];
+        NSTableColumn *outlineColumn = [[NSTableColumn alloc] initWithIdentifier:@"MarkdownOutlineColumn"];
+        [outlineColumn setWidth:1000];
+        if ([outlineColumn.dataCell respondsToSelector:@selector(setAlignment:)])
+            [(NSTextFieldCell *)outlineColumn.dataCell setAlignment:NSTextAlignmentLeft];
+        if ([outlineColumn.dataCell respondsToSelector:@selector(setLineBreakMode:)])
+            [(NSTextFieldCell *)outlineColumn.dataCell setLineBreakMode:NSLineBreakByTruncatingTail];
+        [outlineView addTableColumn:outlineColumn];
+        [outlineView setOutlineTableColumn:outlineColumn];
+        [outlineView setHeaderView:nil];
+        [outlineView setDataSource:self];
+        [outlineView setDelegate:self];
+        [outlineView reloadData];
+        [outlineView expandItem:nil expandChildren:YES];
+        [newScrollView setDocumentView:outlineView];
+
+        self.markdownOutlineView = outlineView;
+        self.markdownOutlineScrollView = newScrollView;
+        markdownOutlineScrollView = newScrollView;
+    }
+
+    [outerSplitView addSubview:sidebarScrollView];
+    [outerSplitView addSubview:oldSplitView];
+    [outerSplitView addSubview:markdownOutlineScrollView];
+    [controller.window setContentView:outerSplitView];
+
+    CGFloat totalWidth = outerSplitView.bounds.size.width;
+    CGFloat editorWidth = totalWidth - sidebarWidth - outlineWidth;
+    if (editorWidth < kMPEditorPreviewMinWidth)
+        editorWidth = kMPEditorPreviewMinWidth;
+
+    [oldSplitView setFrameSize:NSMakeSize(editorWidth, contentView.bounds.size.height)];
+    [sidebarScrollView setFrameSize:NSMakeSize(sidebarWidth, contentView.bounds.size.height)];
+    [markdownOutlineScrollView setFrameSize:NSMakeSize(outlineWidth, contentView.bounds.size.height)];
+    [outerSplitView adjustSubviews];
+
+    [outerSplitView setPosition:sidebarWidth ofDividerAtIndex:0];
+    CGFloat outlineDividerPosition = outerSplitView.bounds.size.width - outlineWidth;
+    if (outlineDividerPosition < sidebarWidth + kMPEditorPreviewMinWidth)
+        outlineDividerPosition = sidebarWidth + kMPEditorPreviewMinWidth;
+    [outerSplitView setPosition:outlineDividerPosition ofDividerAtIndex:1];
+
+    self.markdownOutlineContainerSplitView = outerSplitView;
+    self.markdownOutlineContainerSplitView.delegate = self;
+
+    CGFloat sidebarContentWidth = sidebarScrollView.contentView.bounds.size.width;
+    if (sidebarContentWidth > 0.0)
+        self.sidebarOutlineView.tableColumns.firstObject.width = sidebarContentWidth;
+}
+
 - (void)windowControllerDidLoadNib:(NSWindowController *)controller
 {
     [super windowControllerDidLoadNib:controller];
@@ -411,14 +525,19 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
 
         NSScrollView *scrollView = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, sidebarWidth, contentView.bounds.size.height)];
         [scrollView setHasVerticalScroller:YES];
+        [scrollView setHasHorizontalScroller:NO];
         [scrollView setAutoresizingMask:NSViewHeightSizable];
         
         NSOutlineView *outlineView = [[NSOutlineView alloc] initWithFrame:scrollView.bounds];
         NSTableColumn *column = [[NSTableColumn alloc] initWithIdentifier:@"MainColumn"];
-        [column setWidth:1000];
+        [column setResizingMask:NSTableColumnAutoresizingMask];
+        [column setWidth:scrollView.contentView.bounds.size.width];
         [outlineView addTableColumn:column];
         [outlineView setOutlineTableColumn:column];
         [outlineView setHeaderView:nil];
+        [outlineView setColumnAutoresizingStyle:NSTableViewUniformColumnAutoresizingStyle];
+        if ([outlineView respondsToSelector:@selector(setAutoresizesOutlineColumn:)])
+            [(NSOutlineView *)outlineView setAutoresizesOutlineColumn:YES];
         [outlineView setDataSource:self];
         [outlineView setDelegate:self];
         [outlineView reloadData];
@@ -428,11 +547,16 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
         
         NSScrollView *markdownOutlineScrollView = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, outlineWidth, contentView.bounds.size.height)];
         [markdownOutlineScrollView setHasVerticalScroller:YES];
+        [markdownOutlineScrollView setHasHorizontalScroller:NO];
         [markdownOutlineScrollView setAutoresizingMask:NSViewHeightSizable];
 
         NSOutlineView *markdownOutlineView = [[NSOutlineView alloc] initWithFrame:markdownOutlineScrollView.bounds];
         NSTableColumn *markdownColumn = [[NSTableColumn alloc] initWithIdentifier:@"MarkdownOutlineColumn"];
         [markdownColumn setWidth:1000];
+        if ([markdownColumn.dataCell respondsToSelector:@selector(setAlignment:)])
+            [(NSTextFieldCell *)markdownColumn.dataCell setAlignment:NSTextAlignmentLeft];
+        if ([markdownColumn.dataCell respondsToSelector:@selector(setLineBreakMode:)])
+            [(NSTextFieldCell *)markdownColumn.dataCell setLineBreakMode:NSLineBreakByTruncatingTail];
         [markdownOutlineView addTableColumn:markdownColumn];
         [markdownOutlineView setOutlineTableColumn:markdownColumn];
         [markdownOutlineView setHeaderView:nil];
@@ -469,6 +593,10 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
 
         self.markdownOutlineContainerSplitView = outerSplitView;
         self.markdownOutlineContainerSplitView.delegate = self;
+
+        CGFloat sidebarContentWidth = scrollView.contentView.bounds.size.width;
+        if (sidebarContentWidth > 0.0)
+            self.sidebarOutlineView.tableColumns.firstObject.width = sidebarContentWidth;
     }
     else
     {
@@ -484,11 +612,16 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
         self.markdownOutlinePreviousWidth = outlineWidth;
         NSScrollView *scrollView = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, outlineWidth, contentView.bounds.size.height)];
         [scrollView setHasVerticalScroller:YES];
+        [scrollView setHasHorizontalScroller:NO];
         [scrollView setAutoresizingMask:NSViewHeightSizable];
 
         NSOutlineView *outlineView = [[NSOutlineView alloc] initWithFrame:scrollView.bounds];
         NSTableColumn *column = [[NSTableColumn alloc] initWithIdentifier:@"MarkdownOutlineColumn"];
         [column setWidth:1000];
+        if ([column.dataCell respondsToSelector:@selector(setAlignment:)])
+            [(NSTextFieldCell *)column.dataCell setAlignment:NSTextAlignmentLeft];
+        if ([column.dataCell respondsToSelector:@selector(setLineBreakMode:)])
+            [(NSTextFieldCell *)column.dataCell setLineBreakMode:NSLineBreakByTruncatingTail];
         [outlineView addTableColumn:column];
         [outlineView setOutlineTableColumn:column];
         [outlineView setHeaderView:nil];
@@ -870,6 +1003,16 @@ static BOOL MPIsSetextUnderline(NSString *trimmedLine, NSUInteger *levelOut)
     {
         self.isDirectory = YES;
         self.rootDirectoryURL = url;
+        [self ensureDirectoryLayoutIfNeeded];
+        self.currentEditingURL = nil;
+        if (self.editor)
+            self.editor.string = @"";
+        [self updateChangeCount:NSChangeCleared];
+        if (self.renderer)
+            [self.renderer parseAndRenderNow];
+        if (self.highlighter)
+            [self.highlighter parseAndHighlightNow];
+        [self updateMarkdownOutline];
         // Load files
         [self reloadSidebarItems];
         return YES;
@@ -1136,6 +1279,13 @@ static BOOL MPIsSetextUnderline(NSString *trimmedLine, NSUInteger *levelOut)
 
 - (void)splitViewDidResizeSubviews:(NSNotification *)notification
 {
+    NSSplitView *splitView = notification.object;
+    if (splitView == self.markdownOutlineContainerSplitView && self.sidebarOutlineView)
+    {
+        CGFloat width = self.sidebarOutlineView.enclosingScrollView.contentView.bounds.size.width;
+        if (width > 0.0)
+            self.sidebarOutlineView.tableColumns.firstObject.width = width;
+    }
     [self redrawDivider];
     self.editor.editable = self.editorVisible;
 }
@@ -1303,6 +1453,13 @@ static BOOL MPIsSetextUnderline(NSString *trimmedLine, NSUInteger *levelOut)
 
             CGFloat sidebarWidth = sidebarVisible ? MIN(sidebar.frame.size.width, kMPSidebarMaxWidth) : 0.0;
             CGFloat outlineWidth = outlineVisible ? MIN(outline.frame.size.width, kMPMarkdownOutlineMaxWidth) : 0.0;
+            CGFloat minRequired = kMPEditorPreviewMinWidth;
+            if (sidebarVisible)
+                minRequired += kMPSidebarMinWidth;
+            if (outlineVisible)
+                minRequired += kMPMarkdownOutlineMinWidth;
+            if (availableWidth >= minRequired && sidebarVisible && sidebarWidth < kMPSidebarMinWidth)
+                sidebarWidth = kMPSidebarMinWidth;
 
             CGFloat middleWidth = availableWidth - sidebarWidth - outlineWidth;
             if ((sidebarVisible || outlineVisible) && middleWidth < kMPEditorPreviewMinWidth)
